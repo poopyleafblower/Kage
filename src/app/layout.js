@@ -16,12 +16,12 @@ import { AuthProvider } from './SessionProvider';
 const inter = Inter({ subsets: ['latin'] })
 //const myfont = localFont({ src: "../static-fonts/AldotheApache.ttf" })
 
-const APP_NAME = "Airin";
-const APP_DEFAULT_TITLE = "Airin - Watch Anime Online";
-const APP_DESCRIPTION = "Discover a world of anime without interruptions on Airin! Watch your favorite series for free, with no ads to disrupt your viewing experience. Join now and immerse yourself in the captivating stories and vibrant characters that Airin has to offer!";
+const APP_NAME = "Kage";
+const APP_DEFAULT_TITLE = "Kage - Watch Anime Online";
+const APP_DESCRIPTION = "Discover a world of anime without interruptions on Kage! Watch your favorite series for free, with no ads to disrupt your viewing experience. Join now and immerse yourself in the captivating stories and vibrant characters that Kage has to offer!";
 
 export const metadata = {
-  metadataBase: new URL('https://aniplaynow.live'),
+  metadataBase: new URL('https://kage-puce-beta.vercel.app'),
   applicationName: APP_NAME,
   title: APP_DEFAULT_TITLE,
   description: APP_DESCRIPTION,
@@ -48,7 +48,7 @@ export const metadata = {
     'latest dubbed anime',
     'subbed anime streaming',
     'dubbed anime streaming',
-    'Airin latest anime',
+    'Kage latest anime',
   ],
   manifest: "/manifest.json",
   appleWebApp: {
