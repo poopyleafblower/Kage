@@ -14,6 +14,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
     const [loading, setLoading] = useState(true);
     const [groupedEp, setGroupedEp] = useState(null);
     const [src, setSrc] = useState(null);
+    const [embedSrc, setEmbedSrc] = useState(null);
     const [subtitles, setSubtitles] = useState(null);
     const [thumbnails, setThumbnails] = useState(null);
     const [skiptimes, setSkipTimes] = useState(null);
@@ -24,6 +25,8 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
         const fetchSources = async () => {
             setError(false);
             setLoading(true);
+            setSrc(null);
+            setEmbedSrc(null);
             try {
                 const response = await getAnimeSources(id, provider, epId, epNum, subdub);
 
@@ -35,19 +38,28 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                     return;
                 }
 
-                const sources = response.sources.find(i => i.quality === "default" || i.quality === "auto")?.url
-                    || response.sources.find(i => i.quality === "1080p")?.url
-                    || response.sources.find(i => i.type === "hls")?.url
-                    || response.sources[0]?.url;
+                const preferredSource =
+                    response.sources.find(i => i.type !== "embed" && (i.quality === "default" || i.quality === "auto"))
+                    || response.sources.find(i => i.type !== "embed" && i.quality === "1080p")
+                    || response.sources.find(i => i.type === "hls")
+                    || response.sources.find(i => i.type !== "embed")
+                    || response.sources.find(i => i.type === "embed")
+                    || response.sources[0];
 
-                if (!sources) {
+                if (!preferredSource?.url) {
                     toast.error("No playable source is available for this episode.");
                     setError(true);
                     setLoading(false);
                     return;
                 }
 
-                setSrc(sources);
+                if (preferredSource.type === "embed") {
+                    setEmbedSrc(preferredSource.url);
+                    setSrc(null);
+                } else {
+                    setSrc(preferredSource.url);
+                    setEmbedSrc(null);
+                }
                 const download = response?.download;
 
                 let subtitlesArray = response?.tracks || response?.subtitles || [];
@@ -152,7 +164,17 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                 <div className='mb-2'>
                     {!loading && !error ? (
                         <div className='h-full w-full aspect-video overflow-hidden'>
-                            <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={savedep} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
+                            {embedSrc ? (
+                                <iframe
+                                    src={embedSrc}
+                                    title={`${data?.title?.romaji || "Anime"} Episode ${epNum}`}
+                                    className='h-full w-full border-0'
+                                    allow='autoplay; fullscreen; picture-in-picture'
+                                    allowFullScreen
+                                />
+                            ) : (
+                                <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={savedep} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
+                            )}
                         </div>
                     ) : (
                         <div className="h-full w-full rounded-[8px] relative flex items-center text-xl justify-center aspect-video border border-solid border-white border-opacity-10">
