@@ -3,8 +3,11 @@ import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MediaCard from './MediaCard';
 
-function UserInfo({ lists, session }) {
-    const [activeTab, setActiveTab] = useState(lists.find(tab => tab?.name === "Watching") || lists[0]);
+function UserInfo({ lists = [], session }) {
+    const safeLists = Array.isArray(lists) ? lists : [];
+    const [activeTab, setActiveTab] = useState(
+        safeLists.find(tab => tab?.name === "Watching") || safeLists[0] || null
+    );
 
     const handleClick = (e, tab) => {
         e.preventDefault();
@@ -17,7 +20,7 @@ function UserInfo({ lists, session }) {
         <div>
             <div className="max-w-[95%] lg:max-w-[90%] xl:max-w-[86%] mx-auto">
                 <div className="flex mb-3 flex-nowrap overflow-x-auto scrollbar-hide">
-                    {lists.map((tab) => (
+                    {safeLists.map((tab) => (
                         <div
                             key={tab.name}
                             className={[
@@ -36,7 +39,7 @@ function UserInfo({ lists, session }) {
                 </div>
                 <AnimatePresence mode="wait">
                     <motion.div
-                        key={activeTab.name || "empty"}
+                        key={activeTab?.name || "empty"}
                         initial="initial"
                         animate="enter"
                         exit="exit"
@@ -45,13 +48,18 @@ function UserInfo({ lists, session }) {
                         }}
                     >
                         <div className="mx-3 my-5 grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-3 lg:gap-4 !gap-y-8">
-                            {activeTab &&
+                            {activeTab?.entries?.length ? (
                                 activeTab.entries
                                     .slice() // Create a copy of the array to avoid mutating the original
                                     .sort((a, b) => b.updatedAt - a.updatedAt) // Sort by updatedate in descending order
                                     .map((anime) => (
                                         <MediaCard key={anime.id} anime={anime} session={session}/>
-                                    ))}
+                                    ))
+                            ) : (
+                                <div className="col-span-full py-12 text-center text-default-500">
+                                    No anime in this list yet.
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 </AnimatePresence>
