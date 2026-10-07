@@ -12,7 +12,15 @@ const GraphQlClient = async (token, query, variables) => {
             },
             body: JSON.stringify({ query, variables }),
         });
-        return response.json();
+        const payload = await response.json();
+
+        if (!response.ok || payload?.errors?.length) {
+            const message = payload?.errors?.map((item) => item?.message).filter(Boolean).join(", ")
+                || `AniList request failed with status ${response.status}`;
+            throw new Error(message);
+        }
+
+        return payload;
     } catch (error) {
         console.log("An error occurred, please try again later")
     }
@@ -99,7 +107,14 @@ export const saveProgress = async (token, id, progress) => {
   }
 }
 
-export const UserProfile = async (token, username) => {
-    const res = await GraphQlClient(token, userprofile, { username });
-    return res.data.MediaListCollection;
+export const UserProfile = async (token, userId) => {
+    if (!token || !userId) return null;
+
+    try {
+        const res = await GraphQlClient(token, userprofile, { userId: Number(userId) });
+        return res?.data?.MediaListCollection || null;
+    } catch (error) {
+        console.error("Error fetching AniList profile:", error.message);
+        return null;
+    }
 }
