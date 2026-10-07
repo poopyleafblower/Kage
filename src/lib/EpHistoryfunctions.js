@@ -24,36 +24,137 @@ export const getWatchHistory = async () => {
   revalidatePath("/");
 };
 
-export const createWatchEp = async (aniId, epNum) => {
+export const createWatchEp = async (aniId, epNum, metadata = {}) => {
   try {
     await connectMongo();
     const session = await getAuthSession();
 
-    if (!session) {
+    if (!session?.user?.name || !aniId || !epNum) {
       return;
     }
 
-    // Check if a record with the same name and epId already exists
-    const existingWatch = await Watch.findOne({
-      userName: session?.user.name,
-      aniId: aniId,
-      epNum: epNum,
-    });
+    const update = {
+      userName: session.user.name,
+      aniId: String(aniId),
+      epNum: Number(epNum),
+      createdAt: new Date(),
+    };
 
-    if (existingWatch) {
-      return null;
-    }
+    if (metadata.aniTitle) update.aniTitle = metadata.aniTitle;
+    if (metadata.epTitle) update.epTitle = metadata.epTitle;
+    if (metadata.image) update.image = metadata.image;
+    if (metadata.epId) update.epId = metadata.epId;
+    if (metadata.provider) update.provider = metadata.provider;
+    if (metadata.subtype) update.subtype = metadata.subtype;
+    if (metadata.nextepId) update.nextepId = metadata.nextepId;
+    if (metadata.nextepNum) update.nextepNum = Number(metadata.nextepNum);
 
-    // If no existing record found, create a new one
-    const newwatch = await Watch.create({
-      userName: session?.user.name,
-      aniId: aniId,
-      epNum: epNum,
-    });
+    const watch = await Watch.findOneAndUpdate(
+      {
+        userName: session.user.name,
+        aniId: String(aniId),
+        epNum: Number(epNum),
+      },
+      { $set: update },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
+    return JSON.parse(JSON.stringify(watch));
   } catch (error) {
     console.error("Oops! Something went wrong while creating the episode tracking:", error);
     return;
+  }
+};
+
+export const getAniListCurrent = async () => {
+  try {
+    const session = await getAuthSession();
+    const token = session?.user?.token;
+    const userId = Number(session?.user?.id || session?.user?.sub);
+
+    if (!token || !Number.isFinite(userId)) return [];
+
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: `
+          query KageCurrentAnime($userId: Int!) {
+            MediaListCollection(
+              userId: $userId
+              type: ANIME
+              status: CURRENT
+              sort: UPDATED_TIME_DESC
+            ) {
+              lists {
+                entries {
+                  id
+                  mediaId
+                  progress
+                  updatedAt
+                  media {
+                    id
+                    status
+                    episodes
+                    title {
+                      english
+                      romaji
+                    }
+                    bannerImage
+                    coverImage {
+                      extraLarge
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        variables: { userId },
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    if (payload?.errors?.length) return [];
+
+    const entries = payload?.data?.MediaListCollection?.lists
+      ?.flatMap((list) => list?.entries || []) || [];
+
+    return entries
+      .filter((entry) => entry?.media?.id)
+      .map((entry) => {
+        const currentProgress = Number(entry?.progress || 0);
+        const nextEpisode = Math.max(1, currentProgress + 1);
+        const media = entry.media;
+
+        return {
+          id: `anilist-${entry.id || media.id}`,
+          aniId: String(media.id),
+          aniTitle: media.title?.english || media.title?.romaji || "Anime",
+          image: media.bannerImage || media.coverImage?.extraLarge || "",
+          epId: `${media.id}/sub/${nextEpisode}`,
+          epNum: nextEpisode,
+          provider: "embed",
+          subtype: "sub",
+          timeWatched: 0,
+          duration: 0,
+          createdAt: entry?.updatedAt
+            ? new Date(entry.updatedAt * 1000).toISOString()
+            : new Date().toISOString(),
+          fromAniList: true,
+          aniListProgress: currentProgress,
+        };
+      });
+  } catch (error) {
+    console.error("Error fetching AniList current anime:", error);
+    return [];
   }
 };
 
