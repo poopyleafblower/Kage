@@ -1,5 +1,6 @@
 "use server"
 import { trending, animeinfo, advancedsearch, top100anime, seasonal, popular } from "./anilistqueries";
+import { filterPlayableMedia } from "@/providers/availability";
 
 export const TrendingAnilist = async () => {
     try {
@@ -20,7 +21,7 @@ export const TrendingAnilist = async () => {
     }, { next: { revalidate: 3600 } });
 
         const data = await response.json();
-        return data.data.Page.media;
+        return await filterPlayableMedia(data?.data?.Page?.media || []);
     } catch (error) {
         console.error('Error fetching data from AniList:', error);
     }
@@ -45,7 +46,7 @@ export const PopularAnilist = async () => {
     }, { next: { revalidate: 3600 } });
 
         const data = await response.json();
-        return data.data.Page.media;
+        return await filterPlayableMedia(data?.data?.Page?.media || []);
     } catch (error) {
         console.error('Error fetching popular data from AniList:', error);
     }
@@ -69,7 +70,7 @@ export const Top100Anilist = async () => {
         }, { next: { revalidate: 3600 } });
 
         const data = await response.json();
-        return data.data.Page.media;
+        return await filterPlayableMedia(data?.data?.Page?.media || []);
     } catch (error) {
         console.error('Error fetching data from AniList:', error);
     }
@@ -93,7 +94,7 @@ export const SeasonalAnilist = async () => {
         }, { next: { revalidate: 3600 } });
 
         const data = await response.json();
-        return data.data.Page.media;
+        return await filterPlayableMedia(data?.data?.Page?.media || []);
     } catch (error) {
         console.error('Error fetching data from AniList:', error);
     }
@@ -162,7 +163,11 @@ export const AdvancedSearch = async (searchvalue, selectedYear=null, seasonvalue
         });
 
         const data = await response.json();
-        return data.data.Page;
+        const page = data?.data?.Page || { media: [], pageInfo: {} };
+        return {
+            ...page,
+            media: await filterPlayableMedia(page.media || []),
+        };
     } catch (error) {
         console.error('Error fetching search data from AniList:', error);
     }
