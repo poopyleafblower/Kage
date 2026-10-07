@@ -305,13 +305,17 @@ function Navbarcomponent({ home = false }) {
                                 <Link href={`/settings`} className='w-full h-full block '>Settings</Link>
                             </DropdownItem>
                             <DropdownItem key="logout" color="danger" startContent={<LogoutIcon className={iconClasses} />}>
-                                <button className="font-semibold outline-none border-none w-full h-full block text-left" onClick={() => signOut('AniListProvider')}>Log Out</button>
+                                <button className="font-semibold outline-none border-none w-full h-full block text-left" onClick={() => signOut({ callbackUrl: "/" })}>Log Out</button>
                             </DropdownItem>
                         </DropdownMenu>
                     ) : (
                         <DropdownMenu aria-label="Profile Actions" variant="flat">
-                            <DropdownItem key="notlogprofile" startContent={<LoginIcon className={iconClasses} />}>
-                                <button className="font-semibold outline-none border-none w-full h-full block text-left" onClick={() => signIn('AniListProvider')}>Login With AniList</button>
+                            <DropdownItem
+                                key="notlogprofile"
+                                startContent={<LoginIcon className={iconClasses} />}
+                                onPress={() => signIn("anilist", { callbackUrl: window.location.href })}
+                            >
+                                Login With AniList
                             </DropdownItem>
                             <DropdownItem key="notloghelp_and_feedback" onPress={onOpen} startContent={<FeedbackIcon className={iconClasses} />}>Help & Feedback</DropdownItem>
                             <DropdownItem key="settings" startContent={<SettingsIcon className={iconClasses} />}>
