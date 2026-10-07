@@ -90,67 +90,98 @@ export async function resolveReAnimeAnime(anilistId) {
   }
 }
 
-export async function getReAnimeAudioAvailability(anilistId, episode = 1) {
-  const anime = await resolveReAnimeAnime(anilistId);
-  if (!anime) return { sub: false, dub: false };
-
+async function getDirectServers(anilistId, episode) {
   try {
     const response = await fetch(
-      `${baseUrl()}/api/watch/${encodeURIComponent(anime.slug)}/${encodeURIComponent(episode)}`,
+      `${baseUrl()}/api/flix/${encodeURIComponent(anilistId)}/${encodeURIComponent(episode)}`,
       {
         headers: headers(),
         cache: "no-store",
       },
     );
 
-    if (!response.ok) return { sub: false, dub: false };
+    if (!response.ok) return [];
 
     const payload = await response.json();
-    const links = Array.isArray(payload?.episode_links)
-      ? payload.episode_links
-      : Array.isArray(payload?.servers)
-        ? payload.servers
-        : [];
+    if (payload?.success === false) return [];
 
-    const types = new Set(
-      links
-        .map((item) => item?.dataType || item?.type || item?.audio)
-        .filter(Boolean),
-    );
-
-    return {
-      sub: links.length > 0 && (types.size === 0 || types.has("sub") || types.has("s-sub")),
-      dub: types.has("dub") || types.has("s-dub"),
-    };
+    return Array.isArray(payload?.servers) ? payload.servers : [];
   } catch (error) {
-    console.error("ReAnime audio availability lookup failed:", error.message);
-    return { sub: false, dub: false };
+    console.error("ReAnime direct server lookup failed:", error.message);
+    return [];
   }
 }
 
-export async function getReAnimeSources(anilistId, episode, audio = "sub") {
-  const anime = await resolveReAnimeAnime(anilistId);
-  if (!anime) return null;
+export async function getReAnimeAudioAvailability(anilistId, episode = 1) {
+  let links = await getDirectServers(anilistId, episode);
 
-  try {
-    const response = await fetch(
-      `${baseUrl()}/api/watch/${encodeURIComponent(anime.slug)}/${encodeURIComponent(episode)}`,
-      {
-        headers: headers(),
-        cache: "no-store",
-      },
-    );
+  if (!links.length) {
+    const anime = await resolveReAnimeAnime(anilistId);
 
-    if (!response.ok) {
-      throw new Error(`ReAnime watch endpoint returned ${response.status}`);
+    if (anime) {
+      try {
+        const response = await fetch(
+          `${baseUrl()}/api/watch/${encodeURIComponent(anime.slug)}/${encodeURIComponent(episode)}`,
+          {
+            headers: headers(),
+            cache: "no-store",
+          },
+        );
+
+        if (response.ok) {
+          const payload = await response.json();
+          links = Array.isArray(payload?.episode_links)
+            ? payload.episode_links
+            : Array.isArray(payload?.servers)
+              ? payload.servers
+              : [];
+        }
+      } catch (error) {
+        console.error("ReAnime watch availability lookup failed:", error.message);
+      }
     }
+  }
 
-    const payload = await response.json();
-    const links = Array.isArray(payload?.episode_links)
-      ? payload.episode_links
-      : Array.isArray(payload?.servers)
-        ? payload.servers
-        : [];
+  const types = new Set(
+    links
+      .map((item) => item?.dataType || item?.type || item?.audio)
+      .filter(Boolean),
+  );
+
+  return {
+    sub: links.length > 0 && (types.size === 0 || types.has("sub") || types.has("s-sub")),
+    dub: types.has("dub") || types.has("s-dub"),
+  };
+}
+
+export async function getReAnimeSources(anilistId, episode, audio = "sub") {
+  try {
+    let links = await getDirectServers(anilistId, episode);
+    let anime = null;
+
+    if (!links.length) {
+      anime = await resolveReAnimeAnime(anilistId);
+      if (!anime) return null;
+
+      const response = await fetch(
+        `${baseUrl()}/api/watch/${encodeURIComponent(anime.slug)}/${encodeURIComponent(episode)}`,
+        {
+          headers: headers(),
+          cache: "no-store",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`ReAnime watch endpoint returned ${response.status}`);
+      }
+
+      const payload = await response.json();
+      links = Array.isArray(payload?.episode_links)
+        ? payload.episode_links
+        : Array.isArray(payload?.servers)
+          ? payload.servers
+          : [];
+    }
 
     const acceptedTypes = audio === "dub" ? ["dub", "s-dub"] : ["sub", "s-sub"];
     const filtered = links.filter((item) => {
@@ -188,7 +219,7 @@ export async function getReAnimeSources(anilistId, episode, audio = "sub") {
       subtitles: [],
       download: null,
       provider: "reanime",
-      slug: anime.slug,
+      slug: anime?.slug || null,
     };
   } catch (error) {
     console.error("ReAnime source lookup failed:", error.message);
