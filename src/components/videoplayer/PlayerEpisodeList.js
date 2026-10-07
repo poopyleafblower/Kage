@@ -26,7 +26,6 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
   const [defaultProvider, setdefaultProvider] = useState("");
   const [suboptions, setSuboptions] = useState(null);
   const [episodeData, setEpisodeData] = useState(null);
-  const [dubcount, setDubcount] = useState(0);
   const [currentEpisodes, setCurrentEpisodes] = useState(null);
 
   useEffect(() => {
@@ -66,9 +65,8 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
         const response = await getEpisodes(id, data?.status === "RELEASING", false);
         setEpisodeData(response);
         if (response) {
-          const { suboptions, dubLength } = ProvidersMap(response);
+          const { suboptions } = ProvidersMap(response);
           setSuboptions(suboptions);
-          setDubcount(dubLength);
         }
         setloading(false);
       } catch (error) {
@@ -127,9 +125,8 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
       const response = await getEpisodes(id, data.status === "RELEASING", true);
       setEpisodeData(response);
       if (response) {
-        const { suboptions, dubLength } = ProvidersMap(response);
+        const { suboptions } = ProvidersMap(response);
         setSuboptions(suboptions);
-        setDubcount(dubLength);
       }
       setRefreshLoading(false);
     } catch (error) {
