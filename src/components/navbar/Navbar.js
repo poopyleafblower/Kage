@@ -311,7 +311,7 @@ function Navbarcomponent({ home = false }) {
                     ) : (
                         <DropdownMenu aria-label="Profile Actions" variant="flat">
                             <DropdownItem key="notlogprofile" startContent={<LoginIcon className={iconClasses} />}>
-                                <button className="font-semibold outline-none border-none w-full h-full block text-left" onClick={() => signIn('AniListProvider')}>Login With Anilist</button>
+                                <button className="font-semibold outline-none border-none w-full h-full block text-left" onClick={() => signIn('AniListProvider')}>Login With AniList</button>
                             </DropdownItem>
                             <DropdownItem key="notloghelp_and_feedback" onPress={onOpen} startContent={<FeedbackIcon className={iconClasses} />}>Help & Feedback</DropdownItem>
                             <DropdownItem key="settings" startContent={<SettingsIcon className={iconClasses} />}>
