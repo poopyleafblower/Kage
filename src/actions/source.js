@@ -1,53 +1,99 @@
-"use server"
-import { ANIME } from "@consumet/extensions";
+"use server";
 
-const gogo = new ANIME.Gogoanime();
-
-export async function getGogoSources(id) {
-    try {
-        const data = await gogo.fetchEpisodeSources(id);
-
-        if (!data) return null;
-
-        return data;
-    } catch (error) {
-        console.log(error);
-        return null;
-    }
+function mediaApiBase() {
+  return process.env.KAGE_MEDIA_API_URL?.trim()?.replace(/\/$/, "") || null;
 }
 
-export async function getZoroSources(id, provider, episodeid, epnum, subtype) {
-    try {
-        let data;
-        const API = process.env.ZORO_API;
-        if (API) {
-            const res = await fetch(`${API}/anime/episode-srcs?id=${episodeid}&server=vidstreaming&category=${subtype}`);
-            data = await res.json();
-        } else {
-            console.log(episodeid)
-            const resp = await fetch(`https://anify.eltik.cc/sources?providerId=${provider}&watchId=${encodeURIComponent(episodeid)}&episodeNumber=${epnum}&id=${id}&subType=${subtype}`);
-            data = await resp.json();
-        }
-        if (!data) return null;
-
-        return data;
-    } catch (error) {
-        console.log(error);
-        return null;
-    }
+function mediaApiHeaders() {
+  const headers = { Accept: "application/json" };
+  const token = process.env.KAGE_MEDIA_API_TOKEN?.trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
+
+function normalizeSources(data) {
+  const raw = [
+    ...(Array.isArray(data?.sources) ? data.sources : []),
+    ...(Array.isArray(data?.streams) ? data.streams : []),
+    ...(data?.bestStream ? [data.bestStream] : []),
+    ...(data?.stream_url ? [{ url: data.stream_url, type: "hls", quality: "auto" }] : []),
+  ];
+
+  const seen = new Set();
+
+  return raw
+    .map((source) => {
+      const url = source?.url || source?.file;
+      if (!url || source?.type === "embed") return null;
+      if (seen.has(url)) return null;
+      seen.add(url);
+
+      const inferredType =
+        source?.type ||
+        (url.includes(".m3u8") ? "hls" : url.includes(".mp4") ? "video/mp4" : "file");
+
+      return {
+        ...source,
+        url,
+        type: inferredType,
+        quality: source?.quality || source?.label || (inferredType === "hls" ? "auto" : "default"),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeTracks(data) {
+  const tracks = data?.tracks || data?.subtitles || [];
+  if (!Array.isArray(tracks)) return [];
+
+  return tracks
+    .map((track) => ({
+      ...track,
+      file: track?.file || track?.url,
+      url: track?.url || track?.file,
+      label: track?.label || track?.lang || track?.language || "Subtitle",
+      kind: track?.kind || "subtitles",
+    }))
+    .filter((track) => track.file || track.url);
+}
+
 export async function getAnimeSources(id, provider, epid, epnum, subtype) {
-    try {
-        if (provider === "gogoanime") {
-            const data = await getGogoSources(epid);
-            return data;
-        }
-        if (provider === "zoro") {
-            const data = await getZoroSources(id, provider, epid, epnum, subtype)
-            return data;
-        }
-    } catch (error) {
-        console.log(error);
-        return null;
+  const base = mediaApiBase();
+  if (!base) return null;
+
+  try {
+    const query = new URLSearchParams();
+    if (provider) query.set("provider", provider);
+    if (epid) query.set("episodeId", epid);
+
+    const response = await fetch(
+      `${base}/anime/${id}/${epnum}/${subtype}?${query.toString()}`,
+      {
+        headers: mediaApiHeaders(),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Media API returned ${response.status}`);
     }
+
+    const payload = await response.json();
+    const data = payload?.results || payload;
+    const sources = normalizeSources(data);
+
+    if (!sources.length) return null;
+
+    const tracks = normalizeTracks(data);
+
+    return {
+      sources,
+      tracks,
+      subtitles: tracks,
+      download: data?.download || data?.downloadUrl || null,
+    };
+  } catch (error) {
+    console.error("Media source lookup failed:", error.message);
+    return null;
+  }
 }
