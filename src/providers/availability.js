@@ -1,4 +1,5 @@
 import { getReAnimeAudioAvailability } from "@/providers/reanime";
+import { redis } from "@/lib/rediscache";
 
 const KAGE_ORIGIN = "https://kage-puce-beta.vercel.app";
 
@@ -70,15 +71,40 @@ async function checkReAnime(anilistId, episode = 1) {
 export async function hasPlayableSource(anilistId, episode = 1) {
   if (!anilistId) return false;
 
-  const results = await Promise.allSettled([
-    checkReAnime(anilistId, episode),
+  const cacheKey = `playable:v1:${anilistId}:${episode}`;
+
+  if (redis) {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached === "1") return true;
+      if (cached === "0") return false;
+    } catch {
+      // Availability should still work when Redis is unavailable.
+    }
+  }
+
+  const primary = await Promise.allSettled([
     checkAniwixi(anilistId),
     checkMegaPlay(anilistId, episode),
   ]);
 
-  return results.some(
+  let playable = primary.some(
     (result) => result.status === "fulfilled" && result.value === true,
   );
+
+  if (!playable) {
+    playable = await checkReAnime(anilistId, episode);
+  }
+
+  if (redis) {
+    try {
+      await redis.setex(cacheKey, playable ? 60 * 30 : 60 * 10, playable ? "1" : "0");
+    } catch {
+      // Ignore cache write failures.
+    }
+  }
+
+  return playable;
 }
 
 export async function filterPlayableMedia(items = [], episode = 1) {
