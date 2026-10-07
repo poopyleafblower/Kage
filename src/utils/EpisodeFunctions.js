@@ -32,24 +32,29 @@ export async function CombineEpisodeMeta(episodeData, imageData) {
   return episodeData;
 }
 
-export function ProvidersMap(episodeData, defaultProvider = null, setDefaultProvider = () => { }) {
-  let dProvider = episodeData.filter((i) => i?.consumet === true);
-  let suboptions = [];
-  let dubLength = 0;
+export function ProvidersMap(episodeData, defaultProvider = null, setDefaultProvider = () => {}) {
+  const providers = Array.isArray(episodeData) ? episodeData : [];
+  const preferred =
+    providers.find((provider) => provider?.playback === true) ||
+    providers.find((provider) => provider?.episodes) ||
+    null;
 
-  if (dProvider?.length > 0) {
-    const episodes = dProvider[0].episodes;
-    if (episodes) {
-      suboptions = Object.keys(episodes);
-      dubLength = Math.floor(Math.max(...Object.values(episodes?.dub || []).map(e => e.number)));
-    }
+  const sub = Array.isArray(preferred?.episodes?.sub) ? preferred.episodes.sub : [];
+  const dub = Array.isArray(preferred?.episodes?.dub) ? preferred.episodes.dub : [];
+
+  const suboptions = [];
+  if (sub.length) suboptions.push("sub");
+  if (dub.length) suboptions.push("dub");
+  if (!suboptions.length) suboptions.push("sub");
+
+  const dubLength = dub.reduce(
+    (max, episode) => Math.max(max, Number(episode?.number || 0)),
+    0,
+  );
+
+  if (!defaultProvider && preferred?.providerId) {
+    setDefaultProvider(preferred.providerId);
   }
 
-  if (!defaultProvider) {
-    setDefaultProvider(dProvider[0]?.providerId || episodeData[0]?.providerId);
-  }
-  if (suboptions.length === 0 || (suboptions.length === 1 && suboptions[0] === 'dub')) {
-    suboptions.push('sub');
-  }
   return { suboptions, dubLength };
 }
