@@ -1,5 +1,7 @@
 "use server";
 
+import { getReAnimeSources } from "@/providers/reanime";
+
 function mediaApiBase() {
   return process.env.KAGE_MEDIA_API_URL?.trim()?.replace(/\/$/, "") || null;
 }
@@ -24,7 +26,7 @@ function normalizeSources(data) {
   return raw
     .map((source) => {
       const url = source?.url || source?.file;
-      if (!url || source?.type === "embed") return null;
+      if (!url) return null;
       if (seen.has(url)) return null;
       seen.add(url);
 
@@ -58,6 +60,10 @@ function normalizeTracks(data) {
 }
 
 export async function getAnimeSources(id, provider, epid, epnum, subtype) {
+  if (provider === "reanime") {
+    return getReAnimeSources(id, epnum, subtype);
+  }
+
   const base = mediaApiBase();
   if (!base) return null;
 
