@@ -1,6 +1,7 @@
 "use server";
 
 import { getReAnimeSources } from "@/providers/reanime";
+import { getDirectEmbedSources } from "@/providers/directEmbeds";
 
 function mediaApiBase() {
   return process.env.KAGE_MEDIA_API_URL?.trim()?.replace(/\/$/, "") || null;
@@ -60,12 +61,42 @@ function normalizeTracks(data) {
 }
 
 export async function getAnimeSources(id, provider, epid, epnum, subtype) {
+  if (provider === "embed") {
+    const direct = getDirectEmbedSources(id, epnum, subtype);
+    return {
+      sources: direct,
+      tracks: [],
+      subtitles: [],
+      download: null,
+    };
+  }
+
   if (provider === "reanime") {
-    return getReAnimeSources(id, epnum, subtype);
+    const reanime = await getReAnimeSources(id, epnum, subtype);
+    if (reanime?.sources?.length) {
+      return {
+        ...reanime,
+        sources: [...reanime.sources, ...getDirectEmbedSources(id, epnum, subtype)],
+      };
+    }
+
+    return {
+      sources: getDirectEmbedSources(id, epnum, subtype),
+      tracks: [],
+      subtitles: [],
+      download: null,
+    };
   }
 
   const base = mediaApiBase();
-  if (!base) return null;
+  if (!base) {
+    return {
+      sources: getDirectEmbedSources(id, epnum, subtype),
+      tracks: [],
+      subtitles: [],
+      download: null,
+    };
+  }
 
   try {
     const query = new URLSearchParams();
