@@ -315,7 +315,7 @@ function Navbarcomponent({ home = false }) {
                             <DropdownItem
                                 key="notlogprofile"
                                 startContent={<LoginIcon className={iconClasses} />}
-                                onPress={() => signIn("anilist", { callbackUrl: window.location.href })}
+                                onPress={() => { window.location.href = "/api/auth/anilist/start"; }}
                             >
                                 Login With AniList
                             </DropdownItem>
