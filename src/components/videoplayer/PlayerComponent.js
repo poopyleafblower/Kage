@@ -9,10 +9,6 @@ import { useTitle, useNowPlaying, useDataInfo } from '../../lib/store';
 import { useStore } from "zustand";
 
 function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, savedep }) {
-    const isAppleBrowser = typeof navigator !== "undefined"
-        && /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent)
-        && /Safari/.test(navigator.userAgent)
-        && !/Chrome|CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
     const animetitle = useStore(useTitle, (state) => state.animetitle);
     const [episodeData, setepisodeData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -80,14 +76,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                     return;
                 }
 
-                const orderedSources = isAppleBrowser
-                    ? [
-                        ...response.sources.filter(i => i?.server === "AniXo"),
-                        ...response.sources.filter(i => i?.server === "Megavid"),
-                        ...response.sources.filter(i => i?.server === "TryEmbed"),
-                        ...response.sources.filter(i => !["AniXo", "Megavid", "TryEmbed"].includes(i?.server)),
-                      ]
-                    : response.sources;
+                const orderedSources = response.sources;
 
                 const preferredSource =
                     orderedSources.find(i => i.type !== "embed" && (i.quality === "default" || i.quality === "auto"))
@@ -217,8 +206,6 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                                     className='h-full w-full border-0'
                                     allow='autoplay; fullscreen; picture-in-picture'
                                     allowFullScreen
-                                    sandbox='allow-scripts allow-same-origin allow-forms allow-presentation'
-                                    referrerPolicy='no-referrer'
                                     onError={tryNextServer}
                                 />
                             ) : (
