@@ -9,6 +9,10 @@ import { useTitle, useNowPlaying, useDataInfo } from '../../lib/store';
 import { useStore } from "zustand";
 
 function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, savedep }) {
+    const isAppleBrowser = typeof navigator !== "undefined"
+        && /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent)
+        && /Safari/.test(navigator.userAgent)
+        && !/Chrome|CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
     const animetitle = useStore(useTitle, (state) => state.animetitle);
     const [episodeData, setepisodeData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -17,14 +21,19 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
     const [embedSrc, setEmbedSrc] = useState(null);
     const [playbackSources, setPlaybackSources] = useState([]);
     const [activeServer, setActiveServer] = useState(null);
+    const [activeSourceIndex, setActiveSourceIndex] = useState(-1);
     const [subtitles, setSubtitles] = useState(null);
     const [thumbnails, setThumbnails] = useState(null);
     const [skiptimes, setSkipTimes] = useState(null);
     const [error, setError] = useState(false);
 
-    const applySource = (source) => {
+    const applySource = (source, sourceList = playbackSources) => {
         if (!source?.url) return;
 
+        const list = Array.isArray(sourceList) ? sourceList : [];
+        const index = list.findIndex((item) => item?.url === source.url);
+
+        setActiveSourceIndex(index);
         setActiveServer(source?.server || source?.provider || source?.quality || "Server");
 
         if (source.type === "embed") {
@@ -36,6 +45,20 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
         }
     };
 
+    const tryNextServer = () => {
+        if (!playbackSources?.length) return;
+
+        const currentIndex = activeSourceIndex >= 0
+            ? activeSourceIndex
+            : playbackSources.findIndex((item) => item?.url === embedSrc || item?.url === src);
+
+        const nextIndex = currentIndex >= 0
+            ? (currentIndex + 1) % playbackSources.length
+            : 0;
+
+        applySource(playbackSources[nextIndex], playbackSources);
+    };
+
     useEffect(() => {
         useDataInfo.setState({ dataInfo: data });
         const fetchSources = async () => {
@@ -45,6 +68,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
             setEmbedSrc(null);
             setPlaybackSources([]);
             setActiveServer(null);
+            setActiveSourceIndex(-1);
             try {
                 const response = await getAnimeSources(id, provider, epId, epNum, subdub);
 
@@ -56,13 +80,22 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                     return;
                 }
 
+                const orderedSources = isAppleBrowser
+                    ? [
+                        ...response.sources.filter(i => i?.server === "AniXo"),
+                        ...response.sources.filter(i => i?.server === "Megavid"),
+                        ...response.sources.filter(i => i?.server === "TryEmbed"),
+                        ...response.sources.filter(i => !["AniXo", "Megavid", "TryEmbed"].includes(i?.server)),
+                      ]
+                    : response.sources;
+
                 const preferredSource =
-                    response.sources.find(i => i.type !== "embed" && (i.quality === "default" || i.quality === "auto"))
-                    || response.sources.find(i => i.type !== "embed" && i.quality === "1080p")
-                    || response.sources.find(i => i.type === "hls")
-                    || response.sources.find(i => i.type !== "embed")
-                    || response.sources.find(i => i.type === "embed")
-                    || response.sources[0];
+                    orderedSources.find(i => i.type !== "embed" && (i.quality === "default" || i.quality === "auto"))
+                    || orderedSources.find(i => i.type !== "embed" && i.quality === "1080p")
+                    || orderedSources.find(i => i.type === "hls")
+                    || orderedSources.find(i => i.type !== "embed")
+                    || orderedSources.find(i => i.type === "embed")
+                    || orderedSources[0];
 
                 if (!preferredSource?.url) {
                     toast.error("No playable source is available for this episode.");
@@ -71,8 +104,8 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                     return;
                 }
 
-                setPlaybackSources(response.sources);
-                applySource(preferredSource);
+                setPlaybackSources(orderedSources);
+                applySource(preferredSource, orderedSources);
                 const download = response?.download;
 
                 let subtitlesArray = response?.tracks || response?.subtitles || [];
@@ -184,6 +217,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                                     className='h-full w-full border-0'
                                     allow='autoplay; fullscreen; picture-in-picture'
                                     allowFullScreen
+                                    onError={tryNextServer}
                                 />
                             ) : (
                                 <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={savedep} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
@@ -218,13 +252,25 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                                 <button
                                     key={`${label}-${source?.url || index}`}
                                     type='button'
-                                    onClick={() => applySource(source)}
+                                    onClick={() => applySource(source, playbackSources)}
                                     className={`px-3 py-1.5 rounded-md text-sm border transition-all ${selected ? 'bg-[#4D148C] border-[#6b2caf] text-white' : 'bg-[#18181b] border-white/10 text-white/80 hover:bg-[#27272c]'}`}
                                 >
                                     {label}
                                 </button>
                             );
                         })}
+                    </div>
+                )}
+                {!loading && !error && playbackSources?.length > 1 && (
+                    <div className='mx-2 sm:mx-1 mb-3 flex items-center gap-2 text-xs sm:text-sm text-[#ffffff99]'>
+                        <span>Source blocked or blank on this device?</span>
+                        <button
+                            type='button'
+                            onClick={tryNextServer}
+                            className='px-2.5 py-1 rounded-md border border-white/10 bg-[#18181b] text-white/90 hover:bg-[#27272c]'
+                        >
+                            Try next server
+                        </button>
                     </div>
                 )}
                 <div className=' my-[9px] mx-2 sm:mx-1 px-1 lg:px-0'>
