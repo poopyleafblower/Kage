@@ -15,8 +15,15 @@ async function page() {
     redirect('/');
   }
 
-  const data = await UserProfile(session?.user?.token, session?.user?.name);
-  const { user, lists } = data;
+  const data = await UserProfile(session?.user?.token, session?.user?.id || session?.user?.sub);
+  const user = data?.user || {
+    id: session?.user?.id || session?.user?.sub,
+    name: session?.user?.name,
+    avatar: session?.user?.avatar || (session?.user?.image ? { large: session.user.image } : null),
+    bannerImage: session?.user?.bannerImage || null,
+    createdAt: session?.user?.createdAt || null,
+  };
+  const lists = Array.isArray(data?.lists) ? data.lists : [];
 
   return (
     <div className='min-h-screen'>
@@ -50,7 +57,7 @@ async function page() {
         <div className="flex items-center gap-5 absolute top-32 max-w-[95%] lg:max-w-[90%] xl:max-w-[86%] left-0 right-0 mx-auto">
           <div className='flex items-center gap-4'>
             <Image
-              src={user?.avatar?.large}
+              src={user?.avatar?.large || session?.user?.image || "/icon-192x192.png"}
               alt="user avatar"
               width={100}
               height={100}
