@@ -1,5 +1,6 @@
 "use server"
 import { redis } from "@/lib/rediscache";
+import { hasPlayableSource } from "@/providers/availability";
 
 const RECENT_EPISODES_QUERY = `
 query RecentEpisodes($page: Int, $perPage: Int) {
@@ -64,6 +65,9 @@ export async function getRecentEpisodes() {
       const media = schedule?.media;
       if (!media?.id || seen.has(media.id)) continue;
 
+      const playable = await hasPlayableSource(media.id, schedule.episode || 1);
+      if (!playable) continue;
+
       seen.add(media.id);
       recent.push({
         id: media.id,
@@ -94,7 +98,7 @@ export const GET = async () => {
 
   if (redis) {
     try {
-      cached = await redis.get("recent");
+      cached = await redis.get("recent:v2");
     } catch (error) {
       console.error("Error reading recent episodes cache:", error);
     }
@@ -112,7 +116,7 @@ export const GET = async () => {
 
   if (data?.length > 0 && redis) {
     try {
-      await redis.set("recent", JSON.stringify(data), "EX", 60 * 5);
+      await redis.set("recent:v2", JSON.stringify(data), "EX", 60 * 5);
     } catch (error) {
       console.error("Error writing recent episodes cache:", error);
     }
