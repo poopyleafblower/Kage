@@ -1,6 +1,7 @@
 "use server";
 
 import { redis } from "@/lib/rediscache";
+import { hasPlayableSource } from "@/providers/availability";
 
 const ANIZIP_URL = "https://api.ani.zip/mappings";
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -178,7 +179,7 @@ export const getEpisodes = async (id, status, refresh = false) => {
 
   const cacheTime = status ? 60 * 60 * 3 : 60 * 60 * 24 * 7;
   const providerMode = mediaApiBase() ? "media" : "embed";
-  const cacheKey = `episode:v5:${providerMode}:${id}`;
+  const cacheKey = `episode:v6:${providerMode}:${id}`;
 
   if (redis && !refresh) {
     try {
@@ -195,24 +196,30 @@ export const getEpisodes = async (id, status, refresh = false) => {
   let data = await fetchMediaApiEpisodes(id);
 
   if (!data?.length) {
-    const episodes = await fetchCatalogEpisodes(id);
+    const playable = await hasPlayableSource(id, 1);
 
-    const dubEpisodes = episodes.map((episode) => ({
-      ...episode,
-      id: `${id}/dub/${episode.number}`,
-      audio: "dub",
-    }));
+    if (!playable) {
+      data = [];
+    } else {
+      const episodes = await fetchCatalogEpisodes(id);
 
-    data = episodes.length
-      ? [
-          {
-            providerId: "embed",
-            displayName: "Web",
-            playback: true,
-            episodes: { sub: episodes, dub: dubEpisodes },
-          },
-        ]
-      : [];
+      const dubEpisodes = episodes.map((episode) => ({
+        ...episode,
+        id: `${id}/dub/${episode.number}`,
+        audio: "dub",
+      }));
+
+      data = episodes.length
+        ? [
+            {
+              providerId: "embed",
+              displayName: "Web",
+              playback: true,
+              episodes: { sub: episodes, dub: dubEpisodes },
+            },
+          ]
+        : [];
+    }
   }
 
   if (redis && data.length) {
