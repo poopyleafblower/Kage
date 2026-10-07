@@ -10,10 +10,13 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     {
-      id: "AniListProvider",
+      id: "anilist",
       name: "AniList",
       type: "oauth",
       token: "https://anilist.co/api/v2/oauth/token",
+      client: {
+        token_endpoint_auth_method: "client_secret_post",
+      },
       authorization: {
         url: "https://anilist.co/api/v2/oauth/authorize",
         params: {
