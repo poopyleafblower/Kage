@@ -1,6 +1,7 @@
 "use server";
 
 import { redis } from "@/lib/rediscache";
+import { resolveReAnimeAnime } from "@/providers/reanime";
 
 const ANIZIP_URL = "https://api.ani.zip/mappings";
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -177,8 +178,8 @@ export const getEpisodes = async (id, status, refresh = false) => {
   if (!id) return [];
 
   const cacheTime = status ? 60 * 60 * 3 : 60 * 60 * 24 * 7;
-  const providerMode = mediaApiBase() ? "media" : "catalog";
-  const cacheKey = `episode:v2:${providerMode}:${id}`;
+  const providerMode = mediaApiBase() ? "media" : "reanime";
+  const cacheKey = `episode:v3:${providerMode}:${id}`;
 
   if (redis && !refresh) {
     try {
@@ -195,13 +196,17 @@ export const getEpisodes = async (id, status, refresh = false) => {
   let data = await fetchMediaApiEpisodes(id);
 
   if (!data?.length) {
-    const episodes = await fetchCatalogEpisodes(id);
+    const [episodes, reanime] = await Promise.all([
+      fetchCatalogEpisodes(id),
+      resolveReAnimeAnime(id),
+    ]);
+
     data = episodes.length
       ? [
           {
-            providerId: "catalog",
-            displayName: "Catalog",
-            playback: false,
+            providerId: reanime ? "reanime" : "catalog",
+            displayName: reanime ? "ReAnime" : "Catalog",
+            playback: Boolean(reanime),
             episodes: { sub: episodes, dub: [] },
           },
         ]
