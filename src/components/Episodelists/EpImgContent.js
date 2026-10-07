@@ -4,7 +4,7 @@ import Image from 'next/image'
 import styles from '../../styles/Epimglist.module.css'
 import Link from 'next/link'
 
-function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress }) {
+function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress, playbackEnabled = true }) {
   const scrollContainerRef = useRef(null);
   const targetRef = useRef(null);
 
@@ -22,13 +22,22 @@ function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress 
     <div className={styles.epimgcondiv}>
       {epdata?.map((episode) => {
         const isWatched = parseInt(progress) >= episode.number;
+        const Wrapper = playbackEnabled ? Link : 'div';
+        const wrapperProps = playbackEnabled
+          ? {
+              href: `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
+                episode?.id || episode?.episodeId
+              )}&ep=${episode?.number}&type=${subtype}`,
+            }
+          : {
+              title: "Playback source unavailable",
+            };
+
         return (
-          <Link
-            href={`/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
-              episode?.id || episode?.episodeId
-            )}&ep=${episode?.number}&type=${subtype}`}
-            key={episode?.id || episode?.episodeId}
-            className={`flex flex-row items-center transition-all duration-300 ease-out hover:scale-[0.985] hover:bg-[#27272c] rounded-lg my-[5px] bg-[#18181b] ${episode.number === parseInt(epnum) ? 'scale-[0.99] ring-1 opacity-60 hover:bg-[#18181b] pointer-events-none hover:shadow-lg ring-white' : ''} ${isWatched ? 'opacity-80' : ''}`}
+          <Wrapper
+            {...wrapperProps}
+            key={episode?.id || episode?.episodeId || episode.number}
+            className={`flex flex-row items-center transition-all duration-300 ease-out rounded-lg my-[5px] bg-[#18181b] ${playbackEnabled ? 'hover:scale-[0.985] hover:bg-[#27272c]' : 'opacity-60 cursor-not-allowed'} ${episode.number === parseInt(epnum) ? 'scale-[0.99] ring-1 opacity-60 hover:bg-[#18181b] pointer-events-none hover:shadow-lg ring-white' : ''} ${isWatched ? 'opacity-80' : ''}`}
           >
             <div className={styles.epcondiv}>
               <Image src={episode?.img || episode?.image || data?.bannerImage || data?.coverImage.extraLarge} alt={episode?.title} width={200} height={200} className={styles.epimgcon} quality={100} />
@@ -52,7 +61,7 @@ function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress 
                 <span className='p-1 px-2 text-xs mt-1 rounded-xl bg-[#4D148C] font-semibold w-min inline-block'>Filler</span>
               }
             </div>
-          </Link>
+          </Wrapper>
         );
       })}
     </div>
