@@ -74,11 +74,14 @@ function Episodesection({ data, id, progress, setUrl }) {
 
   useEffect(() => {
     const provider = episodeData?.find((i) => i.providerId === defaultProvider);
-      const filteredEp = provider?.consumet === true
-      ? subtype === 'sub' ? provider?.episodes?.sub : provider?.episodes?.dub
+    const episodes = provider?.episodes;
+
+    const filteredEp = Array.isArray(episodes)
+      ? episodes
       : subtype === 'dub'
-        ? provider?.episodes?.slice(0, dubcount)  : provider?.episodes;
-  
+        ? episodes?.dub
+        : episodes?.sub;
+
     setCurrentEpisodes(filteredEp ?? []);
   }, [subtype, episodeData, defaultProvider]);
 
@@ -132,16 +135,22 @@ function Episodesection({ data, id, progress, setUrl }) {
   };
 
   useEffect(() => {
-    if (currentEpisodes) {
-      const episode = data?.nextAiringEpisode ? currentEpisodes?.find((i) => i.number === progress + 1) : currentEpisodes[0]
+    const provider = episodeData?.find((item) => item.providerId === defaultProvider);
+
+    if (currentEpisodes && provider?.playback === true) {
+      const episode = data?.nextAiringEpisode
+        ? currentEpisodes?.find((item) => item.number === progress + 1)
+        : currentEpisodes[0];
+
       if (episode) {
         const watchurl = `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(episode?.id || episode?.episodeId)}&ep=${episode?.number}&type=${subtype}`;
         setUrl(watchurl);
-      } else {
-        setUrl(null);
+        return;
       }
     }
-  }, [currentEpisodes, progress, defaultProvider]);
+
+    setUrl(null);
+  }, [currentEpisodes, progress, defaultProvider, episodeData, subtype, data?.id, data?.nextAiringEpisode]);
 
   return (
     <div className={styles.episodesection}>
@@ -311,7 +320,7 @@ function Episodesection({ data, id, progress, setUrl }) {
               onChange={handleSubDub}
               disallowEmptySelection={true}
             >
-              {suboptions.map((type) => (
+              {suboptions?.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>
@@ -396,7 +405,7 @@ function Episodesection({ data, id, progress, setUrl }) {
         </>
       )}
 
-      {!loading && !filteredEpisodes && (
+      {!loading && !filteredEpisodes?.length && (
         <div className="text-[17px] font-semibold">
           <p className="text-center mt-4">Oh no! </p>
           <p className="text-center mb-4">This anime is currently unavailable. Check back later for updates!</p>
@@ -406,17 +415,17 @@ function Episodesection({ data, id, progress, setUrl }) {
         <>
           {eplisttype === 3 && (
             <div className={styles.epnumlist}>
-              <EpNumList data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress}/>
+              <EpNumList data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress} playbackEnabled={episodeData?.find((item) => item.providerId === defaultProvider)?.playback === true}/>
             </div>
           )}
           {eplisttype === 2 && (
             <div className={styles.epimgconist}>
-              <EpImgContent data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress}/>
+              <EpImgContent data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress} playbackEnabled={episodeData?.find((item) => item.providerId === defaultProvider)?.playback === true}/>
             </div>
           )}
           {eplisttype === 1 && (
             <div className={styles.epimagelist}>
-              <EpImageList data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress}/>
+              <EpImageList data={data} epdata={filteredEpisodes} defaultProvider={defaultProvider} subtype={subtype} progress={progress} playbackEnabled={episodeData?.find((item) => item.providerId === defaultProvider)?.playback === true}/>
             </div>
           )}
         </>
