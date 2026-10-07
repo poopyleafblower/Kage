@@ -57,11 +57,11 @@ export async function generateMetadata({ params, searchParams }) {
   }
 }
 
-export async function Ephistory(session, aniId, epNum){
+export async function Ephistory(session, aniId, epNum, metadata = {}){
   try {
     let savedep;
     if (session && aniId && epNum) {
-      await createWatchEp(aniId, epNum);
+      await createWatchEp(aniId, epNum, metadata);
       savedep = await getEpisode(aniId, epNum);
     }
     return savedep;
@@ -79,7 +79,16 @@ async function AnimeWatch({ params, searchParams }) {
   const epId = searchParams.epid;
   const subdub = searchParams.type;
   const data = await getInfo(id);
-  const savedep = await Ephistory(session, id, epNum);
+  const savedep = await Ephistory(session, id, epNum, {
+    aniTitle: data?.title?.english || data?.title?.romaji || "Anime",
+    epTitle: `Episode ${epNum}`,
+    image: data?.bannerImage || data?.coverImage?.extraLarge || "",
+    epId: epId || `${id}/${subdub || "sub"}/${epNum}`,
+    provider: provider || "embed",
+    subtype: subdub || "sub",
+    nextepId: `${id}/${subdub || "sub"}/${Number(epNum || 0) + 1}`,
+    nextepNum: Number(epNum || 0) + 1,
+  });
   // console.log(savedep)
   // console.log(data)
 
