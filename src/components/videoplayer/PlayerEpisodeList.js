@@ -93,27 +93,33 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
 
   useEffect(() => {
     const provider = episodeData?.find((i) => i.providerId === defaultProvider);
-    const filteredEp = provider?.consumet === true
-      ? subtype === 'sub' ? provider?.episodes?.sub : provider?.episodes?.dub
+    const episodes = provider?.episodes;
+    const filteredEp = Array.isArray(episodes)
+      ? episodes
       : subtype === 'dub'
-        ? provider?.episodes?.slice(0, dubcount) : provider?.episodes;
+        ? episodes?.dub
+        : episodes?.sub;
 
-    setwatchepdata(filteredEp);
-    setCurrentEpisodes(filteredEp);
-    if (filteredEp) {
-      setProviderChanged(false);
-    }
-  }, [episodeData, subtype, defaultProvider]);
+    const normalized = filteredEp ?? [];
+    setwatchepdata(normalized);
+    setCurrentEpisodes(normalized);
+    setProviderChanged(false);
+  }, [episodeData, subtype, defaultProvider, setwatchepdata]);
 
 
   useEffect(() => {
-    if (!providerChanged && (currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId)) {
-      const episodeId = encodeURIComponent(currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId);
+    const provider = episodeData?.find((item) => item.providerId === defaultProvider);
+    if (
+      provider?.playback === true &&
+      !providerChanged &&
+      (currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId)
+    ) {
+      const episodeId = encodeURIComponent(
+        currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId,
+      );
       router.push(`/anime/watch?id=${id}&host=${defaultProvider}&epid=${episodeId}&ep=${epnum}&type=${subtype}`);
     }
-  //   setTimeout(() => {
-  // }, 0);
-  }, [providerChanged]);
+  }, [providerChanged, currentEpisodes, defaultProvider, episodeData, epnum, id, router, subtype]);
 
   const refreshEpisodes = async () => {
     setRefreshLoading(true);
@@ -268,12 +274,12 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
                 </div>
                 {eplisttype === 2 && (
                   <div className="mt-3">
-                    <EpImgContent data={data} epdata={filteredEp} defaultProvider={defaultProvider} subtype={subtype} epnum={epnum} />
+                    <EpImgContent data={data} epdata={filteredEp} defaultProvider={defaultProvider} subtype={subtype} epnum={epnum} playbackEnabled={episodeData?.find((item) => item.providerId === defaultProvider)?.playback === true} />
                   </div>
                 )}
                 {eplisttype === 3 && (
                   <div className={styles.epnumlist}>
-                    <EpNumList data={data} epdata={filteredEp} defaultProvider={defaultProvider} subtype={subtype} epnum={epnum} />
+                    <EpNumList data={data} epdata={filteredEp} defaultProvider={defaultProvider} subtype={subtype} epnum={epnum} playbackEnabled={episodeData?.find((item) => item.providerId === defaultProvider)?.playback === true} />
                   </div>
                 )}
               </>
