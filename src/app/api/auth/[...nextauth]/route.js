@@ -53,6 +53,7 @@ export const authOptions = {
           response_type: "code",
         },
       },
+      checks: ["state"],
       userinfo: {
         url: graphqlEndpoint,
         async request(context) {
@@ -105,7 +106,8 @@ export const authOptions = {
             token: context.tokens.access_token,
             name: viewer.name,
             sub: String(viewer.id),
-            image: viewer.avatar,
+            image: viewer.avatar?.large || viewer.avatar?.medium || null,
+            avatar: viewer.avatar || null,
             bannerImage: viewer.bannerImage,
             createdAt: viewer.createdAt,
             list: viewer?.mediaListOptions?.animeList?.customLists || [],
@@ -120,6 +122,7 @@ export const authOptions = {
           id: profile.sub,
           name: profile.name,
           image: profile.image,
+          avatar: profile.avatar,
           bannerImage: profile.bannerImage,
           createdAt: profile.createdAt,
           list: profile.list,
@@ -129,6 +132,9 @@ export const authOptions = {
   ],
   session: {
     strategy: "jwt",
+  },
+  pages: {
+    error: "/auth/error",
   },
   callbacks: {
     async jwt({ token, user }) {
