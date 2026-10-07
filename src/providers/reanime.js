@@ -90,6 +90,44 @@ export async function resolveReAnimeAnime(anilistId) {
   }
 }
 
+export async function getReAnimeAudioAvailability(anilistId, episode = 1) {
+  const anime = await resolveReAnimeAnime(anilistId);
+  if (!anime) return { sub: false, dub: false };
+
+  try {
+    const response = await fetch(
+      `${baseUrl()}/api/watch/${encodeURIComponent(anime.slug)}/${encodeURIComponent(episode)}`,
+      {
+        headers: headers(),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) return { sub: false, dub: false };
+
+    const payload = await response.json();
+    const links = Array.isArray(payload?.episode_links)
+      ? payload.episode_links
+      : Array.isArray(payload?.servers)
+        ? payload.servers
+        : [];
+
+    const types = new Set(
+      links
+        .map((item) => item?.dataType || item?.type || item?.audio)
+        .filter(Boolean),
+    );
+
+    return {
+      sub: links.length > 0 && (types.size === 0 || types.has("sub") || types.has("s-sub")),
+      dub: types.has("dub") || types.has("s-dub"),
+    };
+  } catch (error) {
+    console.error("ReAnime audio availability lookup failed:", error.message);
+    return { sub: false, dub: false };
+  }
+}
+
 export async function getReAnimeSources(anilistId, episode, audio = "sub") {
   const anime = await resolveReAnimeAnime(anilistId);
   if (!anime) return null;
