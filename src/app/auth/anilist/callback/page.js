@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 
+function readCookie(name) {
+  const prefix = `${name}=`;
+  const item = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(prefix));
+  return item ? decodeURIComponent(item.slice(prefix.length)) : null;
+}
+
 export default function AniListCallbackPage() {
   const [message, setMessage] = useState("Finishing AniList sign-in…");
 
@@ -10,21 +18,15 @@ export default function AniListCallbackPage() {
     let cancelled = false;
 
     async function finish() {
-      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      const accessToken = hash.get("access_token");
-      const error = hash.get("error");
+      const accessToken = readCookie("kage_anilist_access_token");
 
-      if (error) {
-        window.location.replace(`/auth/error?error=${encodeURIComponent(error)}`);
-        return;
-      }
+      document.cookie =
+        "kage_anilist_access_token=; Max-Age=0; Path=/; Secure; SameSite=Lax";
 
       if (!accessToken) {
-        setMessage("AniList did not return an access token.");
+        window.location.replace("/auth/error?error=OAuthCallback");
         return;
       }
-
-      window.history.replaceState(null, "", window.location.pathname);
 
       const result = await signIn("anilist-token", {
         accessToken,
@@ -45,7 +47,9 @@ export default function AniListCallbackPage() {
 
     finish().catch((error) => {
       console.error("AniList sign-in completion failed:", error);
-      if (!cancelled) setMessage("Kage could not finish AniList sign-in.");
+      if (!cancelled) {
+        setMessage("Kage could not finish AniList sign-in.");
+      }
     });
 
     return () => {
