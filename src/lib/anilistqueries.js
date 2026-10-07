@@ -616,8 +616,8 @@ mutation (
 `
 
 export const userprofile = `
-query ($username: String, $status: MediaListStatus) {
-  MediaListCollection(userName: $username, type: ANIME, status: $status, sort: SCORE_DESC) {
+query ($userId: Int, $status: MediaListStatus) {
+  MediaListCollection(userId: $userId, type: ANIME, status: $status, sort: SCORE_DESC) {
     user {
       id
       name
