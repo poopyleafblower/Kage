@@ -13,9 +13,39 @@ export const authOptions = {
       id: "anilist",
       name: "AniList",
       type: "oauth",
-      token: "https://anilist.co/api/v2/oauth/token",
-      client: {
-        token_endpoint_auth_method: "client_secret_post",
+      token: {
+        url: "https://anilist.co/api/v2/oauth/token",
+        async request(context) {
+          const redirectUri = `${process.env.NEXTAUTH_URL}/api/auth/callback/anilist`;
+          const response = await fetch("https://anilist.co/api/v2/oauth/token", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              grant_type: "authorization_code",
+              client_id: process.env.ANILIST_CLIENT_ID,
+              client_secret: process.env.ANILIST_CLIENT_SECRET,
+              redirect_uri: redirectUri,
+              code: context.params.code,
+            }),
+            cache: "no-store",
+          });
+
+          const tokens = await response.json();
+
+          if (!response.ok || !tokens?.access_token) {
+            const message =
+              tokens?.message ||
+              tokens?.error_description ||
+              tokens?.error ||
+              `AniList token exchange failed with status ${response.status}`;
+            throw new Error(message);
+          }
+
+          return { tokens };
+        },
       },
       authorization: {
         url: "https://anilist.co/api/v2/oauth/authorize",
