@@ -1,7 +1,6 @@
 "use server";
 
 import { redis } from "@/lib/rediscache";
-import { getReAnimeAudioAvailability } from "@/providers/reanime";
 
 const ANIZIP_URL = "https://api.ani.zip/mappings";
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -178,8 +177,8 @@ export const getEpisodes = async (id, status, refresh = false) => {
   if (!id) return [];
 
   const cacheTime = status ? 60 * 60 * 3 : 60 * 60 * 24 * 7;
-  const providerMode = mediaApiBase() ? "media" : "reanime";
-  const cacheKey = `episode:v4:${providerMode}:${id}`;
+  const providerMode = mediaApiBase() ? "media" : "embed";
+  const cacheKey = `episode:v5:${providerMode}:${id}`;
 
   if (redis && !refresh) {
     try {
@@ -198,32 +197,18 @@ export const getEpisodes = async (id, status, refresh = false) => {
   if (!data?.length) {
     const episodes = await fetchCatalogEpisodes(id);
 
-    let playback = false;
-    let dubEpisodes = [];
-
-    if (episodes.length) {
-      const availability = await getReAnimeAudioAvailability(
-        id,
-        episodes[0]?.number || 1,
-      );
-
-      playback = availability.sub || availability.dub;
-
-      if (availability.dub) {
-        dubEpisodes = episodes.map((episode) => ({
-          ...episode,
-          id: `${id}/dub/${episode.number}`,
-          audio: "dub",
-        }));
-      }
-    }
+    const dubEpisodes = episodes.map((episode) => ({
+      ...episode,
+      id: `${id}/dub/${episode.number}`,
+      audio: "dub",
+    }));
 
     data = episodes.length
       ? [
           {
-            providerId: playback ? "reanime" : "catalog",
-            displayName: playback ? "ReAnime" : "Catalog",
-            playback,
+            providerId: "embed",
+            displayName: "Web",
+            playback: true,
             episodes: { sub: episodes, dub: dubEpisodes },
           },
         ]
