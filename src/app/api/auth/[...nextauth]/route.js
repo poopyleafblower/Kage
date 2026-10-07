@@ -1,11 +1,71 @@
 import NextAuth from "next-auth";
 import { getServerSession } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 
 const graphqlEndpoint = process.env.GRAPHQL_ENDPOINT || "https://graphql.anilist.co";
 
 export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
+    CredentialsProvider({
+      id: "anilist-token",
+      name: "AniList",
+      credentials: {
+        accessToken: { label: "AniList access token", type: "text" },
+      },
+      async authorize(credentials) {
+        const accessToken = credentials?.accessToken?.trim();
+        if (!accessToken) return null;
+
+        const response = await fetch(graphqlEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            query: `
+              query KageViewer {
+                Viewer {
+                  id
+                  name
+                  avatar {
+                    large
+                    medium
+                  }
+                  bannerImage
+                  createdAt
+                  mediaListOptions {
+                    animeList {
+                      customLists
+                    }
+                  }
+                }
+              }
+            `,
+          }),
+          cache: "no-store",
+        });
+
+        if (!response.ok) return null;
+
+        const payload = await response.json();
+        const viewer = payload?.data?.Viewer;
+        if (!viewer?.id) return null;
+
+        return {
+          id: String(viewer.id),
+          name: viewer.name,
+          image: viewer.avatar?.large || viewer.avatar?.medium || null,
+          avatar: viewer.avatar || null,
+          bannerImage: viewer.bannerImage || null,
+          createdAt: viewer.createdAt || null,
+          list: viewer?.mediaListOptions?.animeList?.customLists || [],
+          token: accessToken,
+        };
+      },
+    }),
     {
       id: "anilist",
       name: "AniList",
