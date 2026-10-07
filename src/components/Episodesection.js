@@ -24,7 +24,6 @@ function Episodesection({ data, id, progress, setUrl }) {
   const [defaultProvider, setdefaultProvider] = useState("");
   const [suboptions, setSuboptions] = useState(null);
   const [episodeData, setEpisodeData] = useState(null);
-  const [dubcount, setDubcount] = useState(0);
   const [currentEpisodes, setCurrentEpisodes] = useState(null);  
 
   useEffect(() => {
@@ -53,9 +52,8 @@ function Episodesection({ data, id, progress, setUrl }) {
         const response = await getEpisodes(id, data?.status === "RELEASING", false);
         setEpisodeData(response);
         if (response) {
-          const {suboptions, dubLength} = ProvidersMap(response, defaultProvider, setdefaultProvider);
+          const { suboptions } = ProvidersMap(response, defaultProvider, setdefaultProvider);
           setSuboptions(suboptions);
-          setDubcount(dubLength);
         }
         setloading(false);
       } catch (error) {
@@ -121,9 +119,8 @@ function Episodesection({ data, id, progress, setUrl }) {
       const response = await getEpisodes(id, data?.status === "RELEASING", true);
       setEpisodeData(response);
       if (response) {
-        const {suboptions, dubLength} = ProvidersMap(response, defaultProvider, setdefaultProvider);
+        const { suboptions } = ProvidersMap(response, defaultProvider, setdefaultProvider);
         setSuboptions(suboptions);
-        setDubcount(dubLength);
       }
       setloading(false);
       toast.success("Episodes refreshed successfully!");
