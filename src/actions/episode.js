@@ -1,7 +1,7 @@
 "use server";
 
 import { redis } from "@/lib/rediscache";
-import { resolveReAnimeAnime } from "@/providers/reanime";
+import { getReAnimeAudioAvailability, resolveReAnimeAnime } from "@/providers/reanime";
 
 const ANIZIP_URL = "https://api.ani.zip/mappings";
 const ANILIST_URL = "https://graphql.anilist.co";
@@ -201,13 +201,29 @@ export const getEpisodes = async (id, status, refresh = false) => {
       resolveReAnimeAnime(id),
     ]);
 
+    let dubEpisodes = [];
+    if (reanime && episodes.length) {
+      const availability = await getReAnimeAudioAvailability(
+        id,
+        episodes[0]?.number || 1,
+      );
+
+      if (availability.dub) {
+        dubEpisodes = episodes.map((episode) => ({
+          ...episode,
+          id: `${id}/dub/${episode.number}`,
+          audio: "dub",
+        }));
+      }
+    }
+
     data = episodes.length
       ? [
           {
             providerId: reanime ? "reanime" : "catalog",
             displayName: reanime ? "ReAnime" : "Catalog",
             playback: Boolean(reanime),
-            episodes: { sub: episodes, dub: [] },
+            episodes: { sub: episodes, dub: dubEpisodes },
           },
         ]
       : [];
