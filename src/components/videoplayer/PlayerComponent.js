@@ -28,15 +28,29 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                 const response = await getAnimeSources(id, provider, epId, epNum, subdub);
 
                 // console.log(response)
-                if (!response?.sources?.length > 0) {
-                    toast.error("Failed to load episode. Please try again later.");
+                if (!response?.sources?.length) {
+                    toast.error("No playable source is available for this episode.");
                     setError(true);
+                    setLoading(false);
+                    return;
                 }
-                const sources = response?.sources?.find(i => i.quality === "default" || i.quality === "auto")?.url || response?.sources?.find(i => i.quality === "1080p")?.url || response?.sources?.find(i => i.type === "hls")?.url;
+
+                const sources = response.sources.find(i => i.quality === "default" || i.quality === "auto")?.url
+                    || response.sources.find(i => i.quality === "1080p")?.url
+                    || response.sources.find(i => i.type === "hls")?.url
+                    || response.sources[0]?.url;
+
+                if (!sources) {
+                    toast.error("No playable source is available for this episode.");
+                    setError(true);
+                    setLoading(false);
+                    return;
+                }
+
                 setSrc(sources);
                 const download = response?.download;
 
-                let subtitlesArray = response.tracks || response.subtitles;
+                let subtitlesArray = response?.tracks || response?.subtitles || [];
                 const reFormSubtitles = subtitlesArray?.map((i) => ({
                     src: i?.file || i?.url,
                     label: i?.label || i?.lang,
