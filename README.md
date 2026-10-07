@@ -1,9 +1,9 @@
 <div align="center">
-  <a href="https://Aniplaynow.live" target="_blank">
-    <img src="https://github.com/Noname968/airin/blob/c39875dc6e1bc2db9d8371574a9ab3ed95ff3b93/public/icon-512x512.png" alt="Logo" width="140" height="140">
+  <a href="https://kage-puce-beta.vercel.app" target="_blank">
+    <img src="https://github.com/poopyleafblower/Kage/blob/c39875dc6e1bc2db9d8371574a9ab3ed95ff3b93/public/icon-512x512.png" alt="Logo" width="140" height="140">
   </a>
 
-  <h2 align="center">Airin</h3>
+  <h2 align="center">Kage</h3>
 
   <p align="center">
     An open-source Anime streaming site built with Nextjs 14
@@ -48,7 +48,7 @@ Enjoy ad-free streaming and seamless progress tracking with AniList integration,
     - [ ] Mangadex
     - [ ] And some more
 
-See the [open issues](https://github.com/Noname968/airin/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/poopyleafblower/Kage/issues) for a full list of proposed features (and known issues).
 
 
 ## Environment Variables
@@ -88,12 +88,12 @@ MONGODB_URI="Your Mongodb connection String"
 
 Clone the project
 ```bash
-  git clone https://github.com/Noname968/airin.git
+  git clone https://github.com/poopyleafblower/Kage.git
 ```
 
 Go to the project directory
 ```bash
-  cd airin
+  cd Kage
 ```
 
 Install dependencies
@@ -116,29 +116,29 @@ Move the .env file somewhere it won't bother you (optional)
 Run the image:
 ```bash
 docker run -d -it \
---name airin \
+--name Kage \
 -p 3000:3000 \
 -v <path_of_env_file>/.env:/usr/src/app/.env \
-ghcr.io/Noname968/airin:latest
+ghcr.io/poopyleafblower/Kage:latest
 ```
 
 For Docker Compose:
 ```yaml
 version: "3.3"
 services:
-  airin:
-    container_name: airin
+  Kage:
+    container_name: Kage
     ports:
       - 3000:3000
     volumes:
       - <path_of_env_file>/.env:/usr/src/app/.env
-    image: ghcr.io/Noname968/airin:latest
+    image: ghcr.io/poopyleafblower/Kage:latest
 ```
 
 For at full stack deploy (db, redis, consumet api)
-See [docker-compose.yml](https://github.com/Noname968/airin/blob/master/docker-compose.yml)
+See [docker-compose.yml](https://github.com/poopyleafblower/Kage/blob/master/docker-compose.yml)
 
-Access Airin at ``http://localhost:3000``
+Access Kage at ``http://localhost:3000``
 
 ## Self-Hosting Notice
 
@@ -163,7 +163,7 @@ Don't forget to give the project a star! Thanks again!
 <!-- CONTACT -->
 ## Contact
 
-Project Link: [https://github.com/Noname968/airin](https://github.com/Noname968/airin)
+Project Link: [https://github.com/poopyleafblower/Kage](https://github.com/poopyleafblower/Kage)
 
 Discord Server: [https://discord.gg/QnbFaudJNf](https://discord.gg/QnbFaudJNf)
 
