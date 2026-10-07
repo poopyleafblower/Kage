@@ -3,19 +3,28 @@ import Image from 'next/image'
 import styles from '../../styles/Epimglist.module.css'
 import Link from 'next/link'
 
-function EpImageList({ data, epdata, defaultProvider, subtype, progress }) {
+function EpImageList({ data, epdata, defaultProvider, subtype, progress, playbackEnabled = true }) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 lg:gap-4 !max-h-[22.2rem] md:max-h-[26rem] lg:max-h-[29rem] xl:!max-h-[28.8rem] max-2xl:max-h-[40rem] overflow-y-auto ">
       {epdata?.map((episode) => {
         const isWatched = parseInt(progress) >= episode.number;
+        const Wrapper = playbackEnabled ? Link : 'div';
+        const wrapperProps = playbackEnabled
+          ? {
+              href: `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
+                episode?.id || episode?.episodeId
+              )}&ep=${episode?.number}&type=${subtype}`,
+            }
+          : {
+              title: "Playback source unavailable",
+            };
+
         return (
-          <Link
-            href={`/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
-              episode?.id || episode?.episodeId
-            )}&ep=${episode?.number}&type=${subtype}`}
-            key={episode?.id || episode?.episodeId}
-            className={`relative group`}
+          <Wrapper
+            {...wrapperProps}
+            key={episode?.id || episode?.episodeId || episode.number}
+            className={`relative group ${!playbackEnabled ? 'opacity-60 cursor-not-allowed' : ''}`}
           >
             <div className={`relative w-full flex-1 rounded-lg overflow-hidden bg-[#18181b] aspect-video ${isWatched ? 'opacity-60' : ''}`}>
               <Image src={episode?.img || episode?.image || data?.bannerImage || data?.coverImage.extraLarge} width={200} height={200} alt={episode?.title} className="bg-[#18181b] h-full w-full object-cover aspect-w-16 aspect-h-9 rounded-lg transition-all duration-300 transform group-hover:scale-105 group-hover:opacity-60" quality={100} />
@@ -35,7 +44,7 @@ function EpImageList({ data, epdata, defaultProvider, subtype, progress }) {
                 width: `${ isWatched ? '92%' : '0'}`,
               }}
             />          
-            </Link>
+            </Wrapper>
         );
       })}
     </div>
