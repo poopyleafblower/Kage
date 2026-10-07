@@ -1,232 +1,220 @@
 "use server";
-import { ANIME } from "@consumet/extensions";
-import { CombineEpisodeMeta } from "@/utils/EpisodeFunctions";
+
 import { redis } from "@/lib/rediscache";
-import { getMappings } from "./mappings";
 
-const gogo = new ANIME.Gogoanime();
-const zoro = new ANIME.Zoro();
+const ANIZIP_URL = "https://api.ani.zip/mappings";
+const ANILIST_URL = "https://graphql.anilist.co";
 
-export async function fetchGogoEpisodes(id) {
-  try {
-    const data = await gogo.fetchAnimeInfo(id);
-
-    return data?.episodes || [];
-  } catch (error) {
-    console.error("Error fetching gogoanime:", error.message);
-    return [];
-  }
+function mediaApiBase() {
+  return process.env.KAGE_MEDIA_API_URL?.trim()?.replace(/\/$/, "") || null;
 }
 
-export async function fetchZoroEpisodes(id) {
-  try {
-    const data = await zoro.fetchAnimeInfo(id);
-
-    return data?.episodes || [];
-  } catch (error) {
-    console.error("Error fetching zoro:", error.message);
-    return [];
-  }
+function mediaApiHeaders() {
+  const headers = { Accept: "application/json" };
+  const token = process.env.KAGE_MEDIA_API_TOKEN?.trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
-async function fetchEpisodeMeta(id, available = false) {
+function normalizeEpisode(raw, fallbackNumber, audio = "sub", animeId = "") {
+  const number = Number(raw?.number ?? raw?.episode ?? raw?.ep ?? fallbackNumber);
+  if (!Number.isFinite(number) || number <= 0) return null;
+
+  const rawTitle = raw?.title;
+  const title =
+    (typeof rawTitle === "string" ? rawTitle : rawTitle?.en || rawTitle?.english || rawTitle?.["x-jat"]) ||
+    `Episode ${number}`;
+
+  return {
+    ...raw,
+    id: raw?.id || raw?.episodeId || `${animeId}/${audio}/${number}`,
+    number,
+    title,
+    img: raw?.img || raw?.image || null,
+    image: raw?.image || raw?.img || null,
+    description: raw?.description || raw?.overview || raw?.summary || null,
+    duration: raw?.duration || (raw?.runtime ? Number(raw.runtime) * 60 : null),
+    airDate: raw?.airDate || raw?.airdate || raw?.aired || null,
+    isFiller: raw?.isFiller ?? raw?.filler ?? false,
+    audio,
+  };
+}
+
+function normalizeEpisodeArray(list, audio, animeId) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((episode, index) => normalizeEpisode(episode, index + 1, audio, animeId))
+    .filter(Boolean)
+    .sort((a, b) => a.number - b.number);
+}
+
+async function fetchMediaApiEpisodes(id) {
+  const base = mediaApiBase();
+  if (!base) return null;
+
   try {
-    if (available) {
-      return null;
+    const response = await fetch(`${base}/anime/${id}/episodes`, {
+      headers: mediaApiHeaders(),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Media API returned ${response.status}`);
     }
-    const res = await fetch(
-      `https://api.ani.zip/mappings?anilist_id=${id}`
+
+    const payload = await response.json();
+    const data = payload?.results || payload;
+    const episodeData = data?.episodes;
+
+    if (!episodeData) return null;
+
+    const sub = normalizeEpisodeArray(
+      Array.isArray(episodeData) ? episodeData : episodeData?.sub,
+      "sub",
+      id,
     );
-const data = await res.json()
-    const episodesArray = Object.values(data?.episodes);
+    const dub = normalizeEpisodeArray(
+      Array.isArray(episodeData) ? [] : episodeData?.dub,
+      "dub",
+      id,
+    );
 
-    if (!episodesArray) {
-      return [];
-    }
-    return episodesArray;
+    if (!sub.length && !dub.length) return null;
+
+    return [
+      {
+        providerId: "media",
+        displayName: "Media",
+        playback: true,
+        episodes: { sub, dub },
+      },
+    ];
   } catch (error) {
-    console.error("Error fetching and processing meta:", error.message);
+    console.error("Media API episode lookup failed:", error.message);
+    return null;
+  }
+}
+
+async function fetchAniZipEpisodes(id) {
+  try {
+    const response = await fetch(`${ANIZIP_URL}?anilist_id=${id}`, {
+      next: { revalidate: 60 * 60 * 6 },
+    });
+
+    if (!response.ok) {
+      throw new Error(`AniZip returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const entries = Object.entries(data?.episodes || {});
+
+    return entries
+      .map(([episodeNumber, meta]) =>
+        normalizeEpisode(meta, Number(episodeNumber), "sub", id),
+      )
+      .filter(Boolean)
+      .sort((a, b) => a.number - b.number);
+  } catch (error) {
+    console.error("AniZip episode lookup failed:", error.message);
     return [];
   }
 }
 
-const fetchAndCacheData = async (id, meta, redis, cacheTime, refresh) => {
-  let mappings;
-  let subEpisodes = [];
-  let dubEpisodes = [];
-  let allepisodes = [];
+async function fetchAniListFallbackEpisodes(id) {
+  try {
+    const response = await fetch(ANILIST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        query: `
+          query KageEpisodeFallback($id: Int!) {
+            Media(id: $id, type: ANIME) {
+              status
+              episodes
+              nextAiringEpisode {
+                episode
+              }
+            }
+          }
+        `,
+        variables: { id: Number(id) },
+      }),
+      next: { revalidate: 60 * 30 },
+    });
 
-  if (id) {
-    mappings = await getMappings(id);
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    const media = payload?.data?.Media;
+    if (!media) return [];
+
+    let count = 0;
+    if (media.status === "FINISHED") {
+      count = Number(media.episodes || 0);
+    } else if (media?.nextAiringEpisode?.episode) {
+      count = Math.max(0, Number(media.nextAiringEpisode.episode) - 1);
+    }
+
+    return Array.from({ length: count }, (_, index) =>
+      normalizeEpisode({}, index + 1, "sub", id),
+    ).filter(Boolean);
+  } catch (error) {
+    console.error("AniList episode fallback failed:", error.message);
+    return [];
   }
+}
 
-  if (mappings) {
-    if (mappings.gogoanime && Object.keys(mappings.gogoanime).length >= 1) {
-      // Fetch sub episodes if available
-      if (
-        mappings?.gogoanime?.uncensored ||
-        mappings?.gogoanime?.sub ||
-        mappings?.gogoanime?.tv
-      ) {
-        subEpisodes = await fetchGogoEpisodes(
-          mappings?.gogoanime?.uncensored ||
-            mappings.gogoanime.sub ||
-            mappings?.gogoanime?.tv
-        );
-      }
-
-      // Fetch dub episodes if available
-      if (mappings?.gogoanime?.dub) {
-        dubEpisodes = await fetchGogoEpisodes(mappings?.gogoanime?.dub);
-      }
-
-      if (subEpisodes?.length > 0 || dubEpisodes?.length > 0) {
-        allepisodes.push({
-          episodes: { sub: subEpisodes, dub: dubEpisodes },
-          providerId: "gogoanime",
-          consumet: true,
-        });
-      }
-    }
-    if (mappings?.zoro && Object.keys(mappings.zoro).length >= 1) {
-      let subEpisodes = [];
-
-      // Fetch sub episodes if available
-      if (
-        mappings?.zoro?.uncensored ||
-        mappings?.zoro?.sub ||
-        mappings?.zoro?.tv
-      ) {
-        subEpisodes = await fetchZoroEpisodes(
-          mappings?.zoro?.uncensored
-            ? mappings?.zoro?.uncensored
-            : mappings.zoro.sub
-        );
-      }
-      if (subEpisodes?.length > 0) {
-        const transformedEpisodes = subEpisodes.map(episode => ({
-          ...episode,
-          id: transformEpisodeId(episode.id)
-        }));
-      
-        allepisodes.push({
-          episodes: transformedEpisodes,
-          providerId: "zoro",
-        });
-      }
-    }
-  } 
-  const cover = await fetchEpisodeMeta(id, !refresh)
-
-  // Check if redis is available
-  if (redis) {
-    if (allepisodes) {
-      await redis.setex(
-        `episode:${id}`,
-        cacheTime,
-        JSON.stringify(allepisodes)
-      );
-    }
-
-    let data = allepisodes;
-    if (refresh) {
-      if (cover && cover?.length > 0) {
-        try {
-          await redis.setex(`meta:${id}`, cacheTime, JSON.stringify(cover));
-          data = await CombineEpisodeMeta(allepisodes, cover);
-        } catch (error) {
-          console.error("Error serializing cover:", error.message);
-        }
-      } else if (meta) {
-        data = await CombineEpisodeMeta(allepisodes, JSON.parse(meta));
-      }
-    } else if (meta) {
-      data = await CombineEpisodeMeta(allepisodes, JSON.parse(meta));
-    }
-
-    return data;
-  } else {
-    console.error("Redis URL not provided. Caching not possible.");
-    return allepisodes;
-  }
-};
+async function fetchCatalogEpisodes(id) {
+  const aniZipEpisodes = await fetchAniZipEpisodes(id);
+  if (aniZipEpisodes.length) return aniZipEpisodes;
+  return fetchAniListFallbackEpisodes(id);
+}
 
 export const getEpisodes = async (id, status, refresh = false) => {
-  let cacheTime = null;
-  if (status) {
-    cacheTime = 60 * 60 * 3;
-  } else {
-    cacheTime = 60 * 60 * 24 * 45;
-  }
+  if (!id) return [];
 
-  let meta = null;
-  let cached;
+  const cacheTime = status ? 60 * 60 * 3 : 60 * 60 * 24 * 7;
+  const providerMode = mediaApiBase() ? "media" : "catalog";
+  const cacheKey = `episode:v2:${providerMode}:${id}`;
 
-  if (redis) {
+  if (redis && !refresh) {
     try {
-      // // Find keys matching the pattern "meta:*"
-      // const keys = await redis.keys("meta:*");
-
-      // // Delete keys matching the pattern "meta:*"
-      // if (keys.length > 0) {
-      //   await redis.del(keys);
-      //   console.log(`Deleted ${keys.length} keys matching the pattern "meta:*"`);
-      // }
-      meta = await redis.get(`meta:${id}`);
-      if (JSON.parse(meta)?.length === 0) {
-        await redis.del(`meta:${id}`);
-        console.log("deleted meta cache");
-        meta = null;
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
       }
-      cached = await redis.get(`episode:${id}`);
-      if (JSON.parse(cached)?.length === 0) {
-        await redis.del(`episode:${id}`);
-        cached = null;
-      }
-      let data;
-      if (refresh) {
-        data = await fetchAndCacheData(id, meta, redis, cacheTime, refresh);
-      }
-      if (data?.length > 0) {
-        console.log("deleted cache");
-        return data;
-      }
-
-      console.log("using redis");
     } catch (error) {
-      console.error("Error checking Redis cache:", error.message);
+      console.error("Episode cache read failed:", error.message);
     }
   }
 
-  if (cached) {
-    try {
-      let cachedData = JSON.parse(cached);
-      if (meta) {
-        cachedData = await CombineEpisodeMeta(cachedData, JSON.parse(meta));
-      }
-      return cachedData;
-    } catch (error) {
-      console.error("Error parsing cached data:", error.message);
-    }
-  } else {
-    const fetchdata = await fetchAndCacheData(
-      id,
-      meta,
-      redis,
-      cacheTime,
-      !refresh
-    );
-    return fetchdata;
+  let data = await fetchMediaApiEpisodes(id);
+
+  if (!data?.length) {
+    const episodes = await fetchCatalogEpisodes(id);
+    data = episodes.length
+      ? [
+          {
+            providerId: "catalog",
+            displayName: "Catalog",
+            playback: false,
+            episodes: { sub: episodes, dub: [] },
+          },
+        ]
+      : [];
   }
+
+  if (redis && data.length) {
+    try {
+      await redis.setex(cacheKey, cacheTime, JSON.stringify(data));
+    } catch (error) {
+      console.error("Episode cache write failed:", error.message);
+    }
+  }
+
+  return data;
 };
-
-
-function transformEpisodeId(episodeId) {
-  const regex = /^([^$]*)\$episode\$([^$]*)/;
-  const match = episodeId.match(regex);
-
-  if (match && match[1] && match[2]) {
-    return `${match[1]}?ep=${match[2]}`; // Construct the desired output with the episode number
-  }
-  return episodeId; // Return original ID if no match is found
-}
