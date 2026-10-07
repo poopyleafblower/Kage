@@ -7,7 +7,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@nextui-org/react";
 import { useRouter } from 'next-nprogress-bar';
 import { toast } from 'sonner'
 import Skeleton from "react-loading-skeleton";
-import { deleteEpisodes, getWatchHistory } from '@/lib/EpHistoryfunctions';
+import { deleteEpisodes, getWatchHistory, getAniListCurrent } from '@/lib/EpHistoryfunctions';
 
 function ContinueWatching({ session }) {
     const containerRef = useRef();
@@ -43,12 +43,35 @@ function ContinueWatching({ session }) {
                     // const response = await fetch(`/api/watchhistory`, {
                     //     method: "GET",
                     // });
-                    const history = await getWatchHistory();
+                    const [history, aniListCurrent] = await Promise.all([
+                        getWatchHistory(),
+                        getAniListCurrent(),
+                    ]);
 
-                    if (history?.length > 0) {
-                        const data = filterHistory(history);
-                        setStoredData(data);
-                    }
+                    const localHistory = Array.isArray(history)
+                        ? filterHistory(history)
+                        : [];
+
+                    const currentList = Array.isArray(aniListCurrent)
+                        ? aniListCurrent
+                        : [];
+
+                    const localIds = new Set(
+                        localHistory.map((item) => String(item?.aniId)),
+                    );
+
+                    const merged = [
+                        ...localHistory,
+                        ...currentList.filter(
+                            (item) => !localIds.has(String(item?.aniId)),
+                        ),
+                    ].sort(
+                        (a, b) =>
+                            new Date(b?.createdAt || 0) -
+                            new Date(a?.createdAt || 0),
+                    );
+
+                    setStoredData(merged);
                     setloading(false);
                 }
                 else {
@@ -64,7 +87,7 @@ function ContinueWatching({ session }) {
         };
 
         fetchData();
-    }, [setStoredData]);
+    }, [session?.user?.name, session?.user?.id, session?.user?.sub]);
 
 
     async function RemovefromHistory(id, aniTitle) {
@@ -163,17 +186,20 @@ function ContinueWatching({ session }) {
                                 <div className="flex flex-col">
                                     <span className="text-[0.8rem] sm:text-[0.9rem] font-medium line-clamp-1">{anime?.aniTitle}</span>
                                     <span className="text-[0.7rem] text-[#D1D7E0]">
-                                        {formatTime(anime?.timeWatched)} /{' '}
-                                        {formatTime(anime?.duration)} - Episode {anime?.epNum || anime?.epnum}
+                                        {anime?.fromAniList
+                                            ? `AniList • Continue with Episode ${anime?.epNum || anime?.epnum}`
+                                            : `${formatTime(anime?.timeWatched)} / ${formatTime(anime?.duration)} - Episode ${anime?.epNum || anime?.epnum}`}
                                     </span>
                                 </div>
                             </div>
-                            <span
-                                className={`absolute bottom-0 left-2 right-2 h-[1px] rounded-xl bg-red-600 z-10 `}
-                                style={{
-                                    width: `${(anime.timeWatched / anime.duration) * 95}%`,
-                                }}
-                            />
+                            {!anime?.fromAniList && Number(anime?.duration) > 0 && (
+                                <span
+                                    className={`absolute bottom-0 left-2 right-2 h-[1px] rounded-xl bg-red-600 z-10 `}
+                                    style={{
+                                        width: `${(anime.timeWatched / anime.duration) * 95}%`,
+                                    }}
+                                />
+                            )}
                         </Link>
                     </div>
                 ))}
