@@ -1,12 +1,9 @@
 import NextAuth from "next-auth";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "@/mongodb/db";
 import { getServerSession } from "next-auth";
 
 const graphqlEndpoint = process.env.GRAPHQL_ENDPOINT || "https://graphql.anilist.co";
 
 export const authOptions = {
-  adapter: MongoDBAdapter(clientPromise),
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     {
