@@ -69,7 +69,7 @@ function RecentEpisodes({ cardid }) {
                     {data && data?.map((item) => {
                         const anime = {
                             id: item.id || '',
-                            coverImage: item?.coverImage || '',
+                            coverImage: item?.coverImage?.extraLarge || item?.coverImage?.large || item?.coverImage?.medium || item?.coverImage || '',
                             title: item.title || '',
                             status: item.status || '',
                             format: item.format || '',
