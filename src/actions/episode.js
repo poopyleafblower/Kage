@@ -179,7 +179,7 @@ export const getEpisodes = async (id, status, refresh = false) => {
 
   const cacheTime = status ? 60 * 60 * 3 : 60 * 60 * 24 * 7;
   const providerMode = mediaApiBase() ? "media" : "reanime";
-  const cacheKey = `episode:v3:${providerMode}:${id}`;
+  const cacheKey = `episode:v4:${providerMode}:${id}`;
 
   if (redis && !refresh) {
     try {
