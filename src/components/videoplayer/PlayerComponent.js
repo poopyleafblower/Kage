@@ -15,10 +15,26 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
     const [groupedEp, setGroupedEp] = useState(null);
     const [src, setSrc] = useState(null);
     const [embedSrc, setEmbedSrc] = useState(null);
+    const [playbackSources, setPlaybackSources] = useState([]);
+    const [activeServer, setActiveServer] = useState(null);
     const [subtitles, setSubtitles] = useState(null);
     const [thumbnails, setThumbnails] = useState(null);
     const [skiptimes, setSkipTimes] = useState(null);
     const [error, setError] = useState(false);
+
+    const applySource = (source) => {
+        if (!source?.url) return;
+
+        setActiveServer(source?.server || source?.provider || source?.quality || "Server");
+
+        if (source.type === "embed") {
+            setEmbedSrc(source.url);
+            setSrc(null);
+        } else {
+            setSrc(source.url);
+            setEmbedSrc(null);
+        }
+    };
 
     useEffect(() => {
         useDataInfo.setState({ dataInfo: data });
@@ -27,6 +43,8 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
             setLoading(true);
             setSrc(null);
             setEmbedSrc(null);
+            setPlaybackSources([]);
+            setActiveServer(null);
             try {
                 const response = await getAnimeSources(id, provider, epId, epNum, subdub);
 
@@ -53,13 +71,8 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                     return;
                 }
 
-                if (preferredSource.type === "embed") {
-                    setEmbedSrc(preferredSource.url);
-                    setSrc(null);
-                } else {
-                    setSrc(preferredSource.url);
-                    setEmbedSrc(null);
-                }
+                setPlaybackSources(response.sources);
+                applySource(preferredSource);
                 const download = response?.download;
 
                 let subtitlesArray = response?.tracks || response?.subtitles || [];
@@ -194,6 +207,26 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                         </div>
                     )}
                 </div>
+                {!loading && !error && playbackSources?.length > 1 && (
+                    <div className='flex flex-wrap items-center gap-2 my-3 mx-2 sm:mx-1'>
+                        <span className='text-sm text-[#ffffff99] mr-1'>Servers:</span>
+                        {playbackSources.map((source, index) => {
+                            const label = source?.server || source?.provider || `Server ${index + 1}`;
+                            const selected = activeServer === label;
+
+                            return (
+                                <button
+                                    key={`${label}-${source?.url || index}`}
+                                    type='button'
+                                    onClick={() => applySource(source)}
+                                    className={`px-3 py-1.5 rounded-md text-sm border transition-all ${selected ? 'bg-[#4D148C] border-[#6b2caf] text-white' : 'bg-[#18181b] border-white/10 text-white/80 hover:bg-[#27272c]'}`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
                 <div className=' my-[9px] mx-2 sm:mx-1 px-1 lg:px-0'>
                     <h2 className='text-[20px]'>{data?.title?.[animetitle] || data?.title?.romaji}</h2>
                     <h2 className='text-[16px] text-[#ffffffb2]'>{` EPISODE ${epNum} `}</h2>
