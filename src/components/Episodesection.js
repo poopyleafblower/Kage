@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { useSubtype } from '@/lib/store';
 import { useStore } from 'zustand';
 
-function Episodesection({ data, id, progress, setUrl }) {
+function Episodesection({ data, id, progress }) {
   const subtype = useStore(useSubtype, (state) => state.subtype);
   const [loading, setloading] = useState(true);
   const [reversed, setReversed] = useState(false);
@@ -130,24 +130,6 @@ function Episodesection({ data, id, progress, setUrl }) {
       setloading(false);
     }
   };
-
-  useEffect(() => {
-    const provider = episodeData?.find((item) => item.providerId === defaultProvider);
-
-    if (currentEpisodes && provider?.playback === true) {
-      const episode = data?.nextAiringEpisode
-        ? currentEpisodes?.find((item) => item.number === progress + 1)
-        : currentEpisodes[0];
-
-      if (episode) {
-        const watchurl = `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(episode?.id || episode?.episodeId)}&ep=${episode?.number}&type=${subtype}`;
-        setUrl(watchurl);
-        return;
-      }
-    }
-
-    setUrl(null);
-  }, [currentEpisodes, progress, defaultProvider, episodeData, subtype, data?.id, data?.nextAiringEpisode]);
 
   return (
     <div className={styles.episodesection}>
