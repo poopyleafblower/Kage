@@ -11,7 +11,7 @@ import Skeleton from "react-loading-skeleton";
 import { useSubtype } from '@/lib/store';
 import { useStore } from 'zustand';
 
-function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
+function PlayerEpisodeList({ id, data, onprovider, onSubtype, setwatchepdata, epnum }) {
   const subtype = useStore(useSubtype, (state) => state.subtype);
   const router = useRouter();
 
@@ -111,7 +111,11 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
   useEffect(() => {
     setdefaultProvider(onprovider);
     setProviderChanged(true);
-  }, [])
+  }, [onprovider]);
+
+  useEffect(() => {
+    setRouteChanging(false);
+  }, [onSubtype, onprovider, epnum]);
 
 
   useEffect(() => {
