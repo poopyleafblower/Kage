@@ -5,12 +5,17 @@ import AnimeDetailsTop from '@/components/details/AnimeDetailsTop'
 import AnimeDetailsBottom from '@/components/details/AnimeDetailsBottom'
 import Animecards from '@/components/CardComponent/Animecards'
 import { getUserLists } from '@/lib/AnilistUser';
-import { useSubtype } from '@/lib/store';
+import { useSettings, useSubtype } from '@/lib/store';
 import { useStore } from 'zustand';
 
 function DetailsContainer({data, id, session}) {
     const [list,setList] = useState(null);
-    const subtype = useStore(useSubtype, (state) => state.subtype) || "sub";
+    const settings = useStore(useSettings, (state) => state.settings);
+    const subtype = settings?.preferredAudio || useStore(useSubtype, (state) => state.subtype) || "sub";
+
+    useEffect(() => {
+        useSubtype.setState({ subtype });
+    }, [subtype]);
 
     useEffect(() => {
         const fetchlist = async()=>{
