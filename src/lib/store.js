@@ -11,6 +11,7 @@ export const useSettings = create(
                 load: 'idle',
                 audio: false,
                 herotrailer: true,
+                preferredAudio: 'sub',
             },
             setSettings: (settings) => set({ settings }),
         }),
