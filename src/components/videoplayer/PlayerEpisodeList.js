@@ -17,6 +17,7 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
 
   const [loading, setloading] = useState(true);
   const [providerChanged, setProviderChanged] = useState(false);
+  const [routeChanging, setRouteChanging] = useState(false);
   const [refreshloading, setRefreshLoading] = useState(false);
   const [eplisttype, setEplistType] = useState(2);
   const [currentPage, setCurrentPage] = useState(1);
@@ -77,10 +78,34 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
     fetchepisodes();
   }, [id]);
 
-  const handleProviderChange = (provider, subvalue = "sub") => {
-    setdefaultProvider(provider);
-    useSubtype.setState({ subtype: subvalue });
+  const handleProviderChange = (providerId, subvalue = "sub") => {
+    if (providerId === defaultProvider && subvalue === subtype) return;
+
+    setRouteChanging(true);
     setProviderChanged(true);
+    setdefaultProvider(providerId);
+    useSubtype.setState({ subtype: subvalue });
+
+    const providerData = episodeData?.find((item) => item.providerId === providerId);
+    const episodes = Array.isArray(providerData?.episodes)
+      ? providerData.episodes
+      : subvalue === "dub"
+        ? providerData?.episodes?.dub
+        : providerData?.episodes?.sub;
+
+    const currentEpisode =
+      episodes?.find((item) => Number(item?.number) === Number(epnum))
+      || episodes?.[Math.max(0, Number(epnum || 1) - 1)];
+
+    const episodeId = encodeURIComponent(
+      currentEpisode?.id
+      || currentEpisode?.episodeId
+      || `${id}/${subvalue}/${epnum}`,
+    );
+
+    router.push(
+      `/anime/watch?id=${id}&host=${providerId}&epid=${episodeId}&ep=${epnum}&type=${subvalue}`,
+    );
   };
 
   useEffect(() => {
@@ -105,20 +130,6 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
   }, [episodeData, subtype, defaultProvider, setwatchepdata]);
 
 
-  useEffect(() => {
-    const provider = episodeData?.find((item) => item.providerId === defaultProvider);
-    if (
-      provider?.playback === true &&
-      !providerChanged &&
-      (currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId)
-    ) {
-      const episodeId = encodeURIComponent(
-        currentEpisodes?.[epnum - 1]?.id || currentEpisodes?.[epnum - 1]?.episodeId,
-      );
-      router.push(`/anime/watch?id=${id}&host=${defaultProvider}&epid=${episodeId}&ep=${epnum}&type=${subtype}`);
-    }
-  }, [providerChanged, currentEpisodes, defaultProvider, episodeData, epnum, id, router, subtype]);
-
   const refreshEpisodes = async () => {
     setRefreshLoading(true);
     try {
@@ -141,7 +152,15 @@ function PlayerEpisodeList({ id, data, onprovider, setwatchepdata, epnum }) {
   }
 
   return (
-    <div className={styles.episodelist}>
+    <div className={`${styles.episodelist} relative`}>
+      {routeChanging && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-black/35 backdrop-blur-[1px]">
+          <div className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-sm text-white">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            Switching audio…
+          </div>
+        </div>
+      )}
       {loading ? (
         <>
           {[1].map((item) => (
