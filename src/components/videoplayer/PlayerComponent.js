@@ -1,6 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import { getAnimeSources } from '@/actions/source';
+import { createWatchEp, getEpisode } from '@/lib/EpHistoryfunctions';
 import PlayerEpisodeList from './PlayerEpisodeList';
 import Player from './VidstackPlayer/player';
 import { Spinner } from '@vidstack/react';
@@ -22,6 +23,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
     const [thumbnails, setThumbnails] = useState(null);
     const [skiptimes, setSkipTimes] = useState(null);
     const [error, setError] = useState(false);
+    const [historyEpisode, setHistoryEpisode] = useState(savedep || null);
 
     const applySource = (source, sourceList = playbackSources) => {
         if (!source?.url) return;
@@ -54,6 +56,38 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
 
         applySource(playbackSources[nextIndex], playbackSources);
     };
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function syncHistory() {
+            if (!session?.user || !id || !epNum) return;
+
+            const metadata = {
+                aniTitle: data?.title?.english || data?.title?.romaji || "Anime",
+                epTitle: `Episode ${epNum}`,
+                image: data?.bannerImage || data?.coverImage?.extraLarge || "",
+                epId: epId || `${id}/${subdub || "sub"}/${epNum}`,
+                provider: provider || "embed",
+                subtype: subdub || "sub",
+            };
+
+            createWatchEp(id, epNum, metadata).catch(() => {});
+
+            try {
+                const episode = await getEpisode(id, epNum);
+                if (!cancelled && episode) setHistoryEpisode(episode);
+            } catch {
+                // History should never delay or break playback.
+            }
+        }
+
+        syncHistory();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [session?.user, id, epNum, epId, provider, subdub, data?.title?.english, data?.title?.romaji, data?.bannerImage, data?.coverImage?.extraLarge]);
 
     useEffect(() => {
         useDataInfo.setState({ dataInfo: data });
@@ -209,7 +243,7 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                                     onError={tryNextServer}
                                 />
                             ) : (
-                                <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={savedep} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
+                                <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={historyEpisode} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
                             )}
                         </div>
                     ) : (
