@@ -8,12 +8,17 @@ import { useRouter } from 'next-nprogress-bar';
 import { toast } from 'sonner'
 import Skeleton from "react-loading-skeleton";
 import { deleteEpisodes, getWatchHistory, getAniListCurrent } from '@/lib/EpHistoryfunctions';
+import { useSettings } from '@/lib/store';
+import { useStore } from 'zustand';
 
 function ContinueWatching({ session }) {
     const containerRef = useRef();
     const { events } = useDraggable(containerRef);
     const [storedData, setStoredData] = useState([]);
     const [loading, setloading] = useState(true);
+    const [navigatingId, setNavigatingId] = useState(null);
+    const settings = useStore(useSettings, (state) => state.settings);
+    const preferredAudio = settings?.preferredAudio || "sub";
     const router = useRouter();
 
     function filterHistory(history) {
@@ -127,6 +132,26 @@ function ContinueWatching({ session }) {
     };
 
 
+    function getWatchUrl(anime, next = false) {
+        const aniId = anime?.aniId || anime?.id;
+        const episode = Number(
+            next
+                ? (anime?.nextepNum || anime?.epNum || anime?.epnum || 1)
+                : (anime?.epNum || anime?.epnum || 1)
+        );
+        const provider = anime?.provider || "embed";
+        const subtype = preferredAudio || anime?.subtype || "sub";
+        const episodeId = encodeURIComponent(`${aniId}/${subtype}/${episode}`);
+
+        return `/anime/watch?id=${aniId}&host=${provider}&epid=${episodeId}&ep=${episode}&type=${subtype}`;
+    }
+
+    function openWatch(anime, next = false) {
+        const aniId = anime?.aniId || anime?.id;
+        setNavigatingId(String(aniId));
+        router.push(getWatchUrl(anime, next));
+    }
+
     function formatTime(totalSeconds) {
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = Math.floor(totalSeconds % 60);
@@ -168,7 +193,7 @@ function ContinueWatching({ session }) {
                                         {anime?.nextepId &&
                                             <span className='hover:bg-[#403c44] rounded-md text-sm'>
                                                 <button className='px-2 py-2 w-full text-left border-none outline-none'
-                                                    onClick={() => router.push(`/anime/watch?id=${anime?.aniId || anime?.id}&host=${anime?.provider}&epid=${anime?.nextepId || anime?.epid}&ep=${anime?.nextepNum || anime?.epnum}&type=${anime.subtype}`)}
+                                                    onClick={() => openWatch(anime, true)}
                                                 >Play Next Episode</button>
                                             </span>
                                         }
@@ -176,8 +201,12 @@ function ContinueWatching({ session }) {
                                 )}
                             </PopoverContent>
                         </Popover>
-                        <Link className="relative w-60 sm:w-64 md:w-80 aspect-video group"
-                            href={`/anime/watch?id=${anime?.aniId || anime?.id}&host=${anime?.provider}&epid=${anime?.epId || anime?.epid}&ep=${anime?.epNum || anime?.epnum}&type=${anime.subtype}`}>
+                        <button
+                            type="button"
+                            className="relative w-60 sm:w-64 md:w-80 aspect-video group text-left"
+                            onClick={() => openWatch(anime)}
+                            disabled={navigatingId === String(anime?.aniId || anime?.id)}
+                        >
                             <div className="overflow-hidden w-full aspect-video rounded-lg">
                                 <Image src={anime?.image || ''} alt={anime?.aniTitle} width={155} height={230} className="w-full aspect-video object-cover rounded-lg group-hover/item:scale-[1.03] duration-300 ease-out" />
                             </div>
@@ -200,7 +229,12 @@ function ContinueWatching({ session }) {
                                     }}
                                 />
                             )}
-                        </Link>
+                            {navigatingId === String(anime?.aniId || anime?.id) && (
+                                <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-black/55 backdrop-blur-[1px]">
+                                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                </div>
+                            )}
+                        </button>
                     </div>
                 ))}
                 {loading && (
