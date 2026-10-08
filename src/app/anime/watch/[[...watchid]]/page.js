@@ -5,7 +5,6 @@ import PlayerAnimeCard from "@/components/videoplayer/PlayerAnimeCard";
 import Navbarcomponent from "@/components/navbar/Navbar";
 import PlayerComponent from "@/components/videoplayer/PlayerComponent";
 import Animecards from "@/components/CardComponent/Animecards";
-import { createWatchEp, getEpisode } from "@/lib/EpHistoryfunctions";
 import { WatchPageInfo } from "@/lib/AnilistUser";
 import { getAuthSession } from "../../../api/auth/[...nextauth]/route";
 import { redis } from '@/lib/rediscache';
@@ -57,38 +56,16 @@ export async function generateMetadata({ params, searchParams }) {
   }
 }
 
-export async function Ephistory(session, aniId, epNum, metadata = {}){
-  try {
-    let savedep;
-    if (session && aniId && epNum) {
-      await createWatchEp(aniId, epNum, metadata);
-      savedep = await getEpisode(aniId, epNum);
-    }
-    return savedep;
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
-};
-
 async function AnimeWatch({ params, searchParams }) {
-  const session = await getAuthSession();
   const id = searchParams.id;
   const provider = searchParams.host;
   const epNum = searchParams.ep;
   const epId = searchParams.epid;
   const subdub = searchParams.type;
-  const data = await getInfo(id);
-  const savedep = await Ephistory(session, id, epNum, {
-    aniTitle: data?.title?.english || data?.title?.romaji || "Anime",
-    epTitle: `Episode ${epNum}`,
-    image: data?.bannerImage || data?.coverImage?.extraLarge || "",
-    epId: epId || `${id}/${subdub || "sub"}/${epNum}`,
-    provider: provider || "embed",
-    subtype: subdub || "sub",
-    nextepId: `${id}/${subdub || "sub"}/${Number(epNum || 0) + 1}`,
-    nextepNum: Number(epNum || 0) + 1,
-  });
+  const [session, data] = await Promise.all([
+    getAuthSession(),
+    getInfo(id),
+  ]);
   // console.log(savedep)
   // console.log(data)
 
@@ -97,7 +74,7 @@ async function AnimeWatch({ params, searchParams }) {
         <Navbarcomponent />
       <div className=" w-full flex flex-col lg:flex-row lg:max-w-[98%] mx-auto xl:max-w-[94%] lg:gap-[6px] mt-[70px]">
         <div className="flex-grow w-full h-full">
-          <PlayerComponent id={id} epId={epId} provider={provider} epNum={epNum} data={data} subdub={subdub} session={session} savedep={savedep}/>
+          <PlayerComponent id={id} epId={epId} provider={provider} epNum={epNum} data={data} subdub={subdub} session={session} savedep={null}/>
           {data?.status === 'RELEASING' &&
             <NextAiringDate nextAiringEpisode={data?.nextAiringEpisode} />
           }
