@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react'
-import { Switch, cn } from "@nextui-org/react";
+import { Switch, Select, SelectItem, cn } from "@nextui-org/react";
 import { useSettings } from '../../lib/store';
 import { useStore } from "zustand";
 
@@ -49,6 +49,30 @@ function SettingsPage() {
                     <div className=' items-center flex justify-center text-semibold text-[22px]'>Loading...</div>
                 ) : (
                     <>
+                      <div className='flex items-center w-[100%] justify-between'>
+                            <div className='mr-4 w-full'>
+                                <p className='text-[18px] md:text-[21px] font-medium'>Preferred Audio</p>
+                                <p className='text-[11px] md:text-[13px] text-[#bfc6d0] lg:max-w-[55%]'>
+                                    Choose whether Kage should open anime in sub or dub by default.
+                                </p>
+                            </div>
+                            <Select
+                                aria-label="Preferred Audio"
+                                selectedKeys={[settings?.preferredAudio || 'sub']}
+                                disallowEmptySelection
+                                className="max-w-[130px]"
+                                radius="sm"
+                                onChange={(e) => {
+                                    const value = e.target.value || 'sub';
+                                    useSettings.setState({
+                                        settings: { ...useSettings.getState().settings, preferredAudio: value }
+                                    });
+                                }}
+                            >
+                                <SelectItem key="sub" value="sub">Sub</SelectItem>
+                                <SelectItem key="dub" value="dub">Dub</SelectItem>
+                            </Select>
+                        </div>
                       <div className='flex items-center w-[100%] justify-between'>
                             <div className='mr-4 w-full'>
                                 <p className='text-[18px] md:text-[21px] font-medium'>Homepage Trailer</p>
