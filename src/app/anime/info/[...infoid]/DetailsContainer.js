@@ -11,7 +11,8 @@ import { useStore } from 'zustand';
 function DetailsContainer({data, id, session}) {
     const [list,setList] = useState(null);
     const settings = useStore(useSettings, (state) => state.settings);
-    const subtype = settings?.preferredAudio || useStore(useSubtype, (state) => state.subtype) || "sub";
+    const storedSubtype = useStore(useSubtype, (state) => state.subtype);
+    const subtype = settings?.preferredAudio || storedSubtype || "sub";
 
     useEffect(() => {
         useSubtype.setState({ subtype });
