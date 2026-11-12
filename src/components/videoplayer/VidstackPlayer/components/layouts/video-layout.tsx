@@ -12,10 +12,11 @@ import { TimeGroup } from '../time-group';
 export interface VideoLayoutProps {
   groupedEp?: any;
   thumbnails?: string;
-  subtitles?: any
+  subtitles?: any;
+  showPlayNext?: boolean;
 }
 
-export function VideoLayout({ groupedEp, thumbnails, subtitles }: VideoLayoutProps) {
+export function VideoLayout({ groupedEp, thumbnails, subtitles, showPlayNext }: VideoLayoutProps) {
   return (
     <>
       <Gestures />
@@ -71,12 +72,9 @@ export function VideoLayout({ groupedEp, thumbnails, subtitles }: VideoLayoutPro
 
         <Controls.Group className="flex px-4">
           <div className="flex-1" />
-          <>
-            <Buttons.PlayNextButton
-              groupedEp={groupedEp}
-              tooltipPlacement="top end"
-            />
-          </>
+          {showPlayNext && (
+            <Buttons.PlayNextButton groupedEp={groupedEp} tooltipPlacement="top end" />
+          )}
         </Controls.Group>
 
         {/* Desktop Display */}
