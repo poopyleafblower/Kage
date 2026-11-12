@@ -1,3 +1,4 @@
+import { getEpisodes } from "@/actions/episode";
 import Episodesection from '@/components/Episodesection'
 import { AnimeInfoAnilist } from '@/lib/Anilistfunctions'
 import React from 'react'
@@ -61,11 +62,14 @@ async function AnimeDetails({ params }) {
   const id = params.infoid[0];
   // const data = await getInfo(id);
   const data = await AnimeInfoAnilist(id);
+  const providers = data && data.status !== "NOT_YET_RELEASED"
+    ? await getEpisodes(id, data.status === "RELEASING")
+    : [];
 
   return (
     <div className="">
       <Navbarcomponent />
-     <DetailsContainer data={data} id={id} session={session}/>
+     <DetailsContainer data={data} id={id} session={session} providers={providers}/>
     </div>
   )
 }

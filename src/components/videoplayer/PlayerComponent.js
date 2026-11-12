@@ -1,249 +1,205 @@
-"use client"
-import React, { useEffect, useState } from 'react'
-import { getAnimeSources } from '@/actions/source';
-import { createWatchEp, getEpisode } from '@/lib/EpHistoryfunctions';
-import PlayerEpisodeList from './PlayerEpisodeList';
-import Player from './VidstackPlayer/player';
-import { Spinner } from '@vidstack/react';
-import { toast } from 'sonner';
-import { useTitle, useNowPlaying, useDataInfo } from '../../lib/store';
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Spinner } from "@vidstack/react";
 import { useStore } from "zustand";
+import { toast } from "sonner";
+import { getAnimeSources } from "@/actions/source";
+import { createWatchEp, getEpisode } from "@/lib/EpHistoryfunctions";
+import { useTitle, useNowPlaying, useDataInfo } from "@/lib/store";
+import { playableItemId } from "@/utils/watch";
+import PlayerEpisodeList from "./PlayerEpisodeList";
+import Player from "./VidstackPlayer/player";
 
-function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, savedep }) {
+// Audio changes navigate through the watch route, which can remount the player.
+let pendingAudioSwitch;
+
+export default function PlayerComponent(props) {
+    return <WatchItem key={JSON.stringify([props.id, playableItemId(props.epNum)])} {...props} />;
+}
+
+function WatchItem({ id, epId, provider, epNum, subdub, data, session }) {
     const animetitle = useStore(useTitle, (state) => state.animetitle);
-    const [episodeData, setepisodeData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [groupedEp, setGroupedEp] = useState(null);
-    const [src, setSrc] = useState(null);
-    const [embedSrc, setEmbedSrc] = useState(null);
-    const [playbackSources, setPlaybackSources] = useState([]);
-    const [activeServer, setActiveServer] = useState(null);
-    const [activeSourceIndex, setActiveSourceIndex] = useState(-1);
-    const [subtitles, setSubtitles] = useState(null);
-    const [thumbnails, setThumbnails] = useState(null);
-    const [skiptimes, setSkipTimes] = useState(null);
-    const [error, setError] = useState(false);
-    const [historyEpisode, setHistoryEpisode] = useState(savedep || null);
+    const playerRef = useRef(null);
+    const [episodeData, setEpisodeData] = useState([]);
+    const [resolvedPlayback, setResolvedPlayback] = useState(null);
+    const [historyEpisode, setHistoryEpisode] = useState(null);
+    const [historyLoading, setHistoryLoading] = useState(Boolean(session?.user));
+    const [skiptimes, setSkipTimes] = useState([]);
+    const requestKey = playbackRequestKey(id, epNum, provider, epId, subdub);
 
-    const applySource = (source, sourceList = playbackSources) => {
-        if (!source?.url) return;
+    const playback = resolvedPlayback?.requestKey === requestKey ? resolvedPlayback : null;
+    const playbackSources = playback?.sources || [];
+    const activeSourceIndex = playback?.index ?? 0;
+    const source = playbackSources[activeSourceIndex];
+    const embedSrc = source?.type === "embed" ? source.url : null;
+    const loading = !playback || (historyLoading && !embedSrc && Boolean(source));
+    const error = Boolean(playback && !source);
+    const transition = playback?.transition;
+    const currentep = episodeData.find((episode) => Number(episode.number) === Number(epNum));
+    const isMovie = data?.format === "MOVIE" && (data?.episodes || episodeData.length || 1) === 1;
+    const itemTitle = isMovie ? "Complete Movie" : `Episode ${epNum}`;
+    const groupedEp = {
+        currentep,
+        previousep: isMovie ? undefined : episodeData.find((episode) => Number(episode.number) === Number(epNum) - 1),
+        nextep: isMovie ? undefined : episodeData.find((episode) => Number(episode.number) === Number(epNum) + 1),
+    };
 
-        const list = Array.isArray(sourceList) ? sourceList : [];
-        const index = list.findIndex((item) => item?.url === source.url);
+    function capturePosition() {
+        const player = playerRef.current;
+        if (!player?.state.canPlay || !source || embedSrc) return null;
+        if (!player.state.started && player.currentTime === 0) return null;
+        return {
+            source,
+            time: player.currentTime,
+            paused: player.paused,
+        };
+    }
 
-        setActiveSourceIndex(index);
-        setActiveServer(source?.server || source?.provider || source?.quality || "Server");
+    function prepareAudioSwitch(nextProvider, nextEpisodeId, audio) {
+        pendingAudioSwitch = {
+            requestKey: playbackRequestKey(id, epNum, nextProvider, nextEpisodeId, audio),
+            position: capturePosition(),
+            expiresAt: Date.now() + 30_000,
+        };
+    }
 
-        if (source.type === "embed") {
-            setEmbedSrc(source.url);
-            setSrc(null);
-        } else {
-            setSrc(source.url);
-            setEmbedSrc(null);
+    function selectSource(index) {
+        if (index === activeSourceIndex) return;
+        setResolvedPlayback({
+            ...playback,
+            index,
+            transition: getTransition(capturePosition(), playbackSources[index]),
+        });
+    }
+
+    function tryNextServer() {
+        if (playbackSources.length > 1) {
+            selectSource((activeSourceIndex + 1) % playbackSources.length);
         }
-    };
+    }
 
-    const tryNextServer = () => {
-        if (!playbackSources?.length) return;
-
-        const currentIndex = activeSourceIndex >= 0
-            ? activeSourceIndex
-            : playbackSources.findIndex((item) => item?.url === embedSrc || item?.url === src);
-
-        const nextIndex = currentIndex >= 0
-            ? (currentIndex + 1) % playbackSources.length
-            : 0;
-
-        applySource(playbackSources[nextIndex], playbackSources);
-    };
+    useEffect(() => {
+        if (!session?.user) return;
+        let cancelled = false;
+        async function loadHistory() {
+            try {
+                const episode = await getEpisode(id, epNum);
+                if (!cancelled) setHistoryEpisode(episode?.[0] || null);
+            } finally {
+                if (!cancelled) setHistoryLoading(false);
+            }
+        }
+        loadHistory().catch(() => {});
+        createWatchEp(id, epNum, {
+            aniTitle: data?.title?.english || data?.title?.romaji || "Anime",
+            epTitle: itemTitle,
+            image: data?.bannerImage || data?.coverImage?.extraLarge || "",
+            epId,
+            provider,
+            subtype: subdub,
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [session?.user, id, epNum, epId, provider, subdub, itemTitle, data]);
 
     useEffect(() => {
         let cancelled = false;
-
-        async function syncHistory() {
-            if (!session?.user || !id || !epNum) return;
-
-            const metadata = {
-                aniTitle: data?.title?.english || data?.title?.romaji || "Anime",
-                epTitle: `Episode ${epNum}`,
-                image: data?.bannerImage || data?.coverImage?.extraLarge || "",
-                epId: epId || `${id}/${subdub || "sub"}/${epNum}`,
-                provider: provider || "embed",
-                subtype: subdub || "sub",
-            };
-
-            createWatchEp(id, epNum, metadata).catch(() => {});
-
-            try {
-                const episode = await getEpisode(id, epNum);
-                if (!cancelled && episode) setHistoryEpisode(episode);
-            } catch {
-                // History should never delay or break playback.
-            }
-        }
-
-        syncHistory();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [session?.user, id, epNum, epId, provider, subdub, data?.title?.english, data?.title?.romaji, data?.bannerImage, data?.coverImage?.extraLarge]);
-
-    useEffect(() => {
         useDataInfo.setState({ dataInfo: data });
-        const fetchSources = async () => {
-            setError(false);
-            setLoading(true);
-            setSrc(null);
-            setEmbedSrc(null);
-            setPlaybackSources([]);
-            setActiveServer(null);
-            setActiveSourceIndex(-1);
+        async function loadPlayback() {
+            let response;
             try {
-                const response = await getAnimeSources(id, provider, epId, epNum, subdub);
-
-                // console.log(response)
-                if (!response?.sources?.length) {
-                    toast.error("No playable source is available for this episode.");
-                    setError(true);
-                    setLoading(false);
-                    return;
-                }
-
-                const orderedSources = response.sources;
-
-                const preferredSource =
-                    orderedSources.find(i => i.type !== "embed" && (i.quality === "default" || i.quality === "auto"))
-                    || orderedSources.find(i => i.type !== "embed" && i.quality === "1080p")
-                    || orderedSources.find(i => i.type === "hls")
-                    || orderedSources.find(i => i.type !== "embed")
-                    || orderedSources.find(i => i.type === "embed")
-                    || orderedSources[0];
-
-                if (!preferredSource?.url) {
-                    toast.error("No playable source is available for this episode.");
-                    setError(true);
-                    setLoading(false);
-                    return;
-                }
-
-                setPlaybackSources(orderedSources);
-                applySource(preferredSource, orderedSources);
-                const download = response?.download;
-
-                let subtitlesArray = response?.tracks || response?.subtitles || [];
-                const reFormSubtitles = subtitlesArray?.map((i) => ({
-                    src: i?.file || i?.url,
-                    label: i?.label || i?.lang,
-                    kind: i?.kind || (i?.lang === "Thumbnails" ? "thumbnails" : "subtitles"),
-                    default: i?.default || (i?.lang === "English"),
-                }));
-                
-
-                setSubtitles(reFormSubtitles?.filter((s) => s.kind !== 'thumbnails'));
-                setThumbnails(reFormSubtitles?.filter((s) => s.kind === 'thumbnails'));
-
-                const skipResponse = await fetch(
-                    `https://api.aniskip.com/v2/skip-times/${data?.idMal}/${parseInt(epNum)}?types[]=ed&types[]=mixed-ed&types[]=mixed-op&types[]=op&types[]=recap&episodeLength=`
-                );
-
-                const skipData = await skipResponse.json();
-                const op = skipData?.results?.find((item) => item.skipType === 'op') || null;
-                const ed = skipData?.results?.find((item) => item.skipType === 'ed') || null;
-                const episodeLength = skipData?.results?.find((item) => item.episodeLength)?.episodeLength || 0;
-
-                const skiptime = [];
-
-                if (op?.interval) {
-                    skiptime.push({
-                        startTime: op.interval.startTime ?? 0,
-                        endTime: op.interval.endTime ?? 0,
-                        text: 'Opening',
-                    });
-                }
-                if (ed?.interval) {
-                    skiptime.push({
-                        startTime: ed.interval.startTime ?? 0,
-                        endTime: ed.interval.endTime ?? 0,
-                        text: 'Ending',
-                    });
-                } else {
-                    skiptime.push({
-                        startTime: op?.interval?.endTime ?? 0,
-                        endTime: episodeLength,
-                        text: '',
-                    });
-                }
-
-                const episode = {
-                    download: download || null,
-                    skiptimes: skiptime || [],
-                    epId: epId || null,
-                    provider: provider || null,
-                    epNum: epNum || null,
-                    subtype: subdub || null,
-                };
-
-                useNowPlaying.setState({ nowPlaying: episode });
-                setSkipTimes(skiptime);
-                // console.log(skipData);
-                setLoading(false);
+                response = await getAnimeSources(id, provider, epId, epNum, subdub);
             } catch (error) {
-                console.error('Error fetching data:', error);
-                toast.error("Failed to load episode. Please try again later.");
-                const episode = {
-                    download: null,
-                    skiptimes: [],
-                    epId: epId || null,
-                    provider: provider || null,
-                    epNum: epNum || null,
-                    subtype: subdub || null,
-                };
-
-                useNowPlaying.setState({ nowPlaying: episode });
-                setLoading(false);
+                console.error("Error fetching playback:", error);
             }
-        };
-        fetchSources();
-    }, [id, provider, epId, epNum, subdub]);
+            if (cancelled) return;
+
+            const sources = response?.sources || [];
+            const preferred = sources.find((item) => item.type !== "embed" && ["default", "auto"].includes(item.quality))
+                || sources.find((item) => item.type !== "embed" && item.quality === "1080p")
+                || sources.find((item) => item.type !== "embed")
+                || sources[0];
+            if (!preferred) toast.error("No playable source is available for this item.");
+
+            const tracks = (response?.tracks || response?.subtitles || []).map((track) => ({
+                src: track.file || track.url,
+                label: track.label || track.lang,
+                kind: track.kind || (track.lang === "Thumbnails" ? "thumbnails" : "subtitles"),
+                default: track.default || track.lang === "English",
+            }));
+            useNowPlaying.setState({
+                nowPlaying: { download: response?.download || null, epId, provider, epNum, subtype: subdub },
+            });
+            const audioSwitch = pendingAudioSwitch?.requestKey === requestKey ? pendingAudioSwitch : null;
+            if (audioSwitch) pendingAudioSwitch = undefined;
+            setResolvedPlayback({
+                requestKey,
+                sources,
+                index: sources.indexOf(preferred),
+                transition: getTransition(audioSwitch?.expiresAt >= Date.now() ? audioSwitch.position : null, preferred),
+                subtitles: tracks.filter((track) => track.kind !== "thumbnails"),
+                thumbnails: tracks.filter((track) => track.kind === "thumbnails"),
+            });
+        }
+        loadPlayback();
+        return () => { cancelled = true; };
+    }, [data, epId, epNum, id, provider, requestKey, subdub]);
 
     useEffect(() => {
-        if (episodeData) {
-            const previousep = episodeData?.find(
-                (i) => i.number === parseInt(epNum) - 1
+        if (!data?.idMal) return;
+        const controller = new AbortController();
+        async function loadSkipTimes() {
+            const response = await fetch(
+                `https://api.aniskip.com/v2/skip-times/${data.idMal}/${epNum}?types[]=op&types[]=ed&episodeLength=`,
+                { signal: controller.signal },
             );
-            const nextep = episodeData?.find(
-                (i) => i.number === parseInt(epNum) + 1
-            );
-            const currentep = episodeData?.find(
-                (i) => i.number === parseInt(epNum)
-            );
-            const epdata = {
-                previousep,
-                currentep,
-                nextep,
-            }
-            setGroupedEp(epdata);
+            if (!response.ok) return;
+            const result = await response.json();
+            setSkipTimes((result.results || []).filter((item) => item.interval).map((item) => ({
+                startTime: item.interval.startTime,
+                endTime: item.interval.endTime,
+                text: item.skipType === "op" ? "Opening" : "Ending",
+            })));
         }
-    }, [episodeData, epId, provider, epNum, subdub]);
+        loadSkipTimes().catch(() => {});
+        return () => controller.abort();
+    }, [data?.idMal, epNum]);
 
     return (
-        <div className='xl:w-[99%]'>
-            <div>
+        <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,30%)]'>
+            <div className='min-w-0'>
                 <div className='mb-2'>
                     {!loading && !error ? (
                         <div className='h-full w-full aspect-video overflow-hidden'>
                             {embedSrc ? (
                                 <iframe
                                     src={embedSrc}
-                                    title={`${data?.title?.romaji || "Anime"} Episode ${epNum}`}
+                                    title={`${data?.title?.romaji || "Anime"} ${itemTitle}`}
                                     className='h-full w-full border-0'
                                     allow='autoplay; fullscreen; picture-in-picture'
                                     allowFullScreen
                                     onError={tryNextServer}
                                 />
                             ) : (
-                                <Player dataInfo={data} id={id} groupedEp={groupedEp} session={session} savedep={historyEpisode} src={src} subtitles={subtitles} thumbnails={thumbnails} skiptimes={skiptimes} />
+                                <Player
+                                    key={JSON.stringify([requestKey, source.url])}
+                                    playerRef={playerRef}
+                                    dataInfo={data}
+                                    id={id}
+                                    epNum={epNum}
+                                    epId={epId}
+                                    provider={provider}
+                                    subtype={subdub}
+                                    itemTitle={itemTitle}
+                                    groupedEp={groupedEp}
+                                    session={session}
+                                    savedep={historyEpisode}
+                                    source={source}
+                                    transition={transition}
+                                    subtitles={playback.subtitles}
+                                    thumbnails={playback.thumbnails}
+                                    skiptimes={skiptimes}
+                                />
                             )}
                         </div>
                     ) : (
@@ -269,13 +225,14 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                         <span className='text-sm text-[#ffffff99] mr-1'>Servers:</span>
                         {playbackSources.map((source, index) => {
                             const label = source?.server || source?.provider || `Server ${index + 1}`;
-                            const selected = activeServer === label;
+                            const selected = activeSourceIndex === index;
 
                             return (
                                 <button
                                     key={`${label}-${source?.url || index}`}
                                     type='button'
-                                    onClick={() => applySource(source, playbackSources)}
+                                    aria-pressed={selected}
+                                    onClick={() => selectSource(index)}
                                     className={`px-3 py-1.5 rounded-md text-sm border transition-all ${selected ? 'bg-[#4D148C] border-[#6b2caf] text-white' : 'bg-[#18181b] border-white/10 text-white/80 hover:bg-[#27272c]'}`}
                                 >
                                     {label}
@@ -298,14 +255,23 @@ function PlayerComponent({ id, epId, provider, epNum, subdub, data, session, sav
                 )}
                 <div className=' my-[9px] mx-2 sm:mx-1 px-1 lg:px-0'>
                     <h2 className='text-[20px]'>{data?.title?.[animetitle] || data?.title?.romaji}</h2>
-                    <h2 className='text-[16px] text-[#ffffffb2]'>{` EPISODE ${epNum} `}</h2>
+                    <h2 className='text-[16px] text-[#ffffffb2]'>{itemTitle}</h2>
                 </div>
             </div>
-            <div className='w-[98%] mx-auto lg:w-full'>
-                <PlayerEpisodeList id={id} data={data} setwatchepdata={setepisodeData} onprovider={provider} onSubtype={subdub} epnum={epNum} />
-            </div>
+            <aside aria-label='Episode picker' className='min-w-0 lg:max-h-[80vh] lg:overflow-y-auto'>
+                <PlayerEpisodeList id={id} data={data} setwatchepdata={setEpisodeData} onprovider={provider} onSubtype={subdub} epnum={epNum} itemTitle={itemTitle} onBeforeSourceChange={prepareAudioSwitch} />
+            </aside>
         </div>
     )
 }
 
-export default PlayerComponent
+function playbackRequestKey(id, epNum, provider, episodeId, audio) {
+    return JSON.stringify([String(id), playableItemId(epNum), provider, episodeId, audio]);
+}
+
+function getTransition(position, source) {
+    if (!position || !source || source.type === "embed") return null;
+    const sameTimeline = position.source.url === source.url ||
+        (source.timelineId && position.source.timelineId === source.timelineId);
+    return { time: sameTimeline ? position.time : 0, paused: position.paused };
+}

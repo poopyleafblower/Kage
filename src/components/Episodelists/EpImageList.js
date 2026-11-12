@@ -1,3 +1,4 @@
+import { buildWatchUrl } from '@/utils/watch';
 import React from 'react'
 import Image from 'next/image'
 import styles from '../../styles/Epimglist.module.css'
@@ -12,9 +13,7 @@ function EpImageList({ data, epdata, defaultProvider, subtype, progress, playbac
         const Wrapper = playbackEnabled ? Link : 'div';
         const wrapperProps = playbackEnabled
           ? {
-              href: `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
-                episode?.id || episode?.episodeId
-              )}&ep=${episode?.number}&type=${subtype}`,
+              href: buildWatchUrl({ titleId: data?.id, episodeNumber: episode.number, episodeId: episode.id || episode.episodeId, provider: defaultProvider, audio: subtype }),
             }
           : {
               title: "Playback source unavailable",

@@ -1,286 +1,245 @@
-"use client"
-import React, { useEffect, useRef, useState } from "react";
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import "@vidstack/react/player/styles/base.css";
-import styles from "./player.module.css";
-import {
-  MediaPlayer,
-  MediaProvider,
-  useMediaStore,
-  useMediaRemote,
-  Track,
-  TextTrack,
-} from "@vidstack/react";
+import "@vidstack/react/player/styles/default/keyboard.css";
+import { MediaPlayer, MediaProvider, Track, TextTrack, isHLSProvider } from "@vidstack/react";
+import Hls from "hls.js";
+import { DefaultKeyboardDisplay } from "@vidstack/react/player/layouts/default";
+import { FastForwardIcon, FastBackwardIcon } from "@vidstack/react/icons";
 import { useRouter } from "next/navigation";
-import VideoProgressSave from '../../../utils/VideoProgressSave';
-import { VideoLayout } from "./components/layouts/video-layout";
-import { DefaultKeyboardDisplay } from '@vidstack/react/player/layouts/default';
-import '@vidstack/react/player/styles/default/keyboard.css';
+import { useStore } from "zustand";
 import { updateEp } from "@/lib/EpHistoryfunctions";
 import { saveProgress } from "@/lib/AnilistUser";
-import { FastForwardIcon, FastBackwardIcon } from '@vidstack/react/icons';
-import { useSettings, useTitle, useNowPlaying } from '@/lib/store';
-import { useStore } from "zustand";
-import { toast } from 'sonner';
+import { useSettings, useTitle } from "@/lib/store";
+import { buildWatchUrl, formatWatchTime, playableItemId } from "@/utils/watch";
+import { readItemProgress, writeItemProgress } from "@/utils/watchProgress";
+import { VideoLayout } from "./components/layouts/video-layout";
+import styles from "./player.module.css";
 
-function Player({ dataInfo, id, groupedEp, src, session, savedep, subtitles, thumbnails, skiptimes }) {
+export default function Player({
+  dataInfo, id, epNum, epId, provider, subtype, itemTitle, groupedEp, source,
+  session, savedep, transition, subtitles, thumbnails, skiptimes, playerRef,
+}) {
   const settings = useStore(useSettings, (state) => state.settings);
   const animetitle = useStore(useTitle, (state) => state.animetitle);
-  const nowPlaying = useStore(useNowPlaying, (state) => state.nowPlaying);
-  const { epId, provider, epNum, subtype } = nowPlaying;
-  const { previousep, currentep, nextep } = groupedEp || {};
-  const [getVideoProgress, UpdateVideoProgress] = VideoProgressSave();
   const router = useRouter();
+  const [canPlay, setCanPlay] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const { currentep, nextep } = groupedEp;
+  const [resumeTime] = useState(() => {
+    if (transition) return 0;
+    const saved = savedep?.timeWatched != null ? savedep : readItemProgress(id, playableItemId(epNum));
+    const time = Number(saved?.timeWatched);
+    return time > 0 && (!saved?.duration || time < saved.duration) ? time : 0;
+  });
+  const [showResume, setShowResume] = useState(resumeTime > 0);
+  const lastPosition = useRef(null);
+  const lastWrite = useRef(0);
+  const appliedTransition = useRef(false);
+  const aniListSaved = useRef(false);
 
-  const playerRef = useRef(null);
-  const { duration, fullscreen } = useMediaStore(playerRef);
-  const remote = useMediaRemote(playerRef);
-
-  const [opbutton, setopbutton] = useState(false);
-  const [edbutton, setedbutton] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progressSaved, setprogressSaved] = useState(false);
-  let interval;
+  const saveLocalPosition = useCallback(() => {
+    if (lastPosition.current) writeItemProgress(lastPosition.current);
+  }, []);
 
   useEffect(() => {
-    playerRef.current?.subscribe(({ currentTime, duration }) => {
+    const saveWhenHidden = () => {
+      if (document.visibilityState === "hidden") saveLocalPosition();
+    };
+    window.addEventListener("pagehide", saveLocalPosition);
+    document.addEventListener("visibilitychange", saveWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", saveLocalPosition);
+      document.removeEventListener("visibilitychange", saveWhenHidden);
+      saveLocalPosition();
+    };
+  }, [saveLocalPosition]);
 
-      if (skiptimes && skiptimes.length > 0) {
-        const opStart = skiptimes[0]?.startTime ?? 0;
-        const opEnd = skiptimes[0]?.endTime ?? 0;
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!canPlay || !player || !skiptimes.length) return;
 
-        const epStart = skiptimes[1]?.startTime ?? 0;
-        const epEnd = skiptimes[1]?.endTime ?? 0;
+    const track = new TextTrack({ kind: "chapters", default: true, label: "Chapters" });
+    for (const cue of skiptimes) {
+      track.addCue(new window.VTTCue(cue.startTime, cue.endTime, cue.text));
+    }
+    player.textTracks.add(track);
+    return () => player.textTracks.remove(track);
+  }, [canPlay, playerRef, skiptimes]);
 
-        const opButtonText = skiptimes[0]?.text || "";
-        const edButtonText = skiptimes[1]?.text || "";
+  const activeSkip = skiptimes.find((cue) => currentTime > cue.startTime && currentTime < cue.endTime);
+  useEffect(() => {
+    if (activeSkip && settings?.autoskip && playerRef.current?.state.started) {
+      playerRef.current.currentTime = activeSkip.endTime;
+    }
+  }, [activeSkip, currentTime, playerRef, settings?.autoskip]);
 
-        setopbutton(opButtonText === "Opening" && (currentTime > opStart && currentTime < opEnd));
-        setedbutton(edButtonText === "Ending" && (currentTime > epStart && currentTime < epEnd));
+  function recordPosition(time, flush = false) {
+    const player = playerRef.current;
+    const duration = player?.state.duration;
+    if (!Number.isFinite(time) || !Number.isFinite(duration) || duration <= 0) return;
 
-        if (settings?.autoskip) {
-          if (opButtonText === "Opening" && currentTime > opStart && currentTime < opEnd) {
-            Object.assign(playerRef.current ?? {}, { currentTime: opEnd });
-            return null;
-          }
-          if (edButtonText === "Ending" && currentTime > epStart && currentTime < epEnd) {
-            Object.assign(playerRef.current ?? {}, { currentTime: epEnd });
-            return null;
-          }
-        }
-      }
-    })
+    lastPosition.current = {
+      aniId: String(id),
+      aniTitle: dataInfo?.title?.[animetitle] || dataInfo?.title?.romaji || "Anime",
+      epTitle: dataInfo?.format === "MOVIE" ? itemTitle : (currentep?.title || itemTitle),
+      image: currentep?.img || currentep?.image || dataInfo?.bannerImage || dataInfo?.coverImage?.extraLarge,
+      epId,
+      epNum: Number(epNum),
+      timeWatched: time >= duration ? duration : Math.floor(time),
+      duration,
+      provider,
+      subtype,
+      nextepId: nextep?.id || nextep?.episodeId || null,
+      nextepNum: nextep?.number || null,
+      createdAt: new Date().toISOString(),
+    };
 
-  }, [settings]);
-
-  function onCanPlay() {
-    if (skiptimes && skiptimes.length > 0) {
-      const track = new TextTrack({
-        kind: 'chapters',
-        default: true,
-        label: 'English',
-        language: 'en-US',
-        type: 'json'
-      });
-      for (const cue of skiptimes) {
-        track.addCue(new window.VTTCue(Number(cue.startTime), Number(cue.endTime), cue.text))
-      }
-      playerRef.current.textTracks.add(track);
+    const now = Date.now();
+    if (flush || now - lastWrite.current >= 5000) {
+      lastWrite.current = now;
+      saveLocalPosition();
+      if (session?.user) updateEp(lastPosition.current).catch(console.error);
     }
   }
 
-  function onEnd() {
-    // console.log("End")
-    setIsPlaying(false);
-  }
-
-  function onEnded() {
-    if (!nextep?.id) return;
-    if (settings?.autonext) {
-      router.push(
-        `/anime/watch?id=${dataInfo?.id}&host=${provider}&epid=${nextep?.id || nextep?.episodeId}&ep=${nextep?.number}&type=${subtype}`
-      );
+  function onTimeUpdate({ currentTime: time }) {
+    setCurrentTime(time);
+    if (!showResume && playerRef.current?.state.started) {
+      recordPosition(time);
+      const length = playerRef.current.state.duration;
+      if (session?.user?.token && !aniListSaved.current && length > 0 && time >= length * 0.9) {
+        aniListSaved.current = true;
+        saveProgress(session.user.token, id, Number(epNum));
+      }
     }
-  }
-
-  function onPlay() {
-    // console.log("play")
-    setIsPlaying(true);
   }
 
   function onPause() {
-    // console.log("pause")
-    setIsPlaying(false);
+    const player = playerRef.current;
+    if (player?.state.started && !showResume) recordPosition(player.currentTime, true);
   }
 
-  useEffect(() => {
-    if (isPlaying) {
-      interval = setInterval(async () => {
-        const currentTime = playerRef.current?.currentTime
-          ? Math.round(playerRef.current?.currentTime)
-          : 0;
+  function onCanPlay() {
+    setCanPlay(true);
+    if (!transition || appliedTransition.current) return;
+    appliedTransition.current = true;
+    const player = playerRef.current;
+    player.currentTime = Math.min(transition.time, player.state.duration);
+    if (!transition.paused) player.play().catch(() => {});
+  }
 
-        await updateEp({
-          userName: session?.user?.name,
-          aniId: String(dataInfo?.id) || String(id),
-          aniTitle: dataInfo?.title?.[animetitle] || dataInfo?.title?.romaji,
-          epTitle: currentep?.title || `EP ${epNum}`,
-          image: currentep?.img || currentep?.image ||
-            dataInfo?.bannerImage || dataInfo?.coverImage?.extraLarge || '',
-          epId: epId,
-          epNum: Number(epNum) || Number(currentep?.number),
-          timeWatched: currentTime,
-          duration: duration,
-          provider: provider,
-          nextepId: nextep?.id || null,
-          nextepNum: nextep?.number || null,
-          subtype: subtype
-        })
+  function chooseResume(time) {
+    const player = playerRef.current;
+    if (!player?.state.canPlay) return;
+    const startTime = Math.min(time, player.state.duration);
+    player.currentTime = startTime;
+    recordPosition(startTime, true);
+    setShowResume(false);
+    player.play().catch(() => {});
+  }
 
-        UpdateVideoProgress(dataInfo?.id || id, {
-          aniId: String(dataInfo?.id) || String(id),
-          aniTitle: dataInfo?.title?.[animetitle] || dataInfo?.title?.romaji,
-          epTitle: currentep?.title || `EP ${epNum}`,
-          image: currentep?.img || currentep?.image ||
-            dataInfo?.bannerImage || dataInfo?.coverImage?.extraLarge || '',
-          epId: epId,
-          epNum: Number(epNum) || Number(currentep?.number),
-          timeWatched: currentTime,
-          duration: duration,
-          provider: provider,
-          nextepId: nextep?.id || nextep?.episodeId || null,
-          nextepNum: nextep?.number || null,
-          subtype: subtype,
-          createdAt: new Date().toISOString(),
-        });
-      }, 5000);
-    } else {
-      clearInterval(interval);
-    }
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [isPlaying, duration]);
-
-  function onLoadedMetadata() {
-    if (savedep && savedep[0]) {
-      const seekTime = savedep[0]?.timeWatched;
-      if (seekTime) {
-        remote.seek(seekTime - 3);
-      }
-    }
-    else {
-      const seek = getVideoProgress(dataInfo?.id);
-      if (seek?.epNum === Number(epNum)) {
-        const seekTime = seek?.timeWatched;
-        const percentage = duration !== 0 ? seekTime / Math.round(duration) : 0;
-
-        if (percentage >= 0.95) {
-          remote.seek(0);
-        } else {
-          remote.seek(seekTime - 3);
-        }
-      }
+  function onEnded() {
+    recordPosition(duration, true);
+    if (nextep && settings?.autonext) {
+      router.push(buildWatchUrl({
+        titleId: id,
+        episodeNumber: nextep.number,
+        episodeId: nextep.id || nextep.episodeId,
+        provider,
+        audio: subtype,
+      }));
     }
   }
 
-  function onTimeUpdate() {
-    const currentTime = playerRef.current?.currentTime;
-    const timeToShowButton = duration - 8;
-    const percentage = currentTime / duration;
-
-    if (session && !progressSaved && percentage >= 0.9) {
-      try {
-        setprogressSaved(true); // Mark progress as saved
-        saveProgress(session.user.token, dataInfo?.id || id, Number(epNum) || Number(currentep?.number));
-      } catch (error) {
-        console.error("Error saving progress:", error);
-        toast.error("Error saving progress due to high traffic.");
-      }
-    }
-
-    const nextButton = document.querySelector(".nextbtn");
-
-    if (nextButton) {
-      if (duration !== 0 && (currentTime > timeToShowButton && nextep?.id)) {
-        nextButton.classList.remove("hidden");
-      } else {
-        nextButton.classList.add("hidden");
-      }
-    }
-  }
-
-  function onSourceChange() {
-    if(fullscreen){
-      console.log("true")
-    }else{
-      console.log("false")
-    }
-  }
-
-  function handleop() {
-    console.log("Skipping Intro");
-    Object.assign(playerRef.current ?? {}, { currentTime: skiptimes[0]?.endTime ?? 0 });
-  }
-
-  function handleed() {
-    console.log("Skipping Outro");
-    Object.assign(playerRef.current ?? {}, { currentTime: skiptimes[1]?.endTime ?? 0 });
-  }
-
-
+  const mediaType = source.type === "hls" ? "application/x-mpegurl" : source.type;
   return (
-    <MediaPlayer key={src} ref={playerRef} playsInline aspectRatio={16 / 9} load={settings?.load || 'idle'} muted={settings?.audio || false}
-      autoPlay={settings?.autoplay || false}
-      title={currentep?.title || `EP ${epNum}` || 'Loading...'}
-      className={`${styles.player} player relative`}
-      crossOrigin={"anonymous"}
-      streamType="on-demand"
-      keyTarget={playerRef}
-      onEnd={onEnd}
-      onEnded={onEnded}
-      onCanPlay={onCanPlay}
-      src={{
-        src: src,
-        type: "application/x-mpegurl",
-      }}
-      onPlay={onPlay}
-      onPause={onPause}
-      onLoadedMetadata={onLoadedMetadata}
-      onTimeUpdate={onTimeUpdate}
-      onSourceChange={onSourceChange}
-    >
-      <MediaProvider>
-        {subtitles && subtitles?.map((track) => (
-          <Track {...track} key={track.src} />
-        ))}
-      </MediaProvider>
-      {opbutton && <button onClick={handleop} className='absolute bottom-[70px] sm:bottom-[83px] right-4 z-[40] bg-white text-black py-2 px-3 rounded-[6px] font-medium text-[15px]'>Skip Opening</button>}
-      {edbutton && <button onClick={handleed} className='absolute bottom-[70px] sm:bottom-[83px] right-4 z-[40] bg-white text-black py-2 px-3 rounded-[6px] font-medium text-[15px]'>Skip Ending</button>}
-      <VideoLayout
-        subtitles={subtitles}
-        thumbnails={thumbnails ? process.env.NEXT_PUBLIC_PROXY_URI + '/' + thumbnails[0]?.src : ""}
-        groupedEp={groupedEp}
-      />
-      <DefaultKeyboardDisplay
-        icons={{
-          Play: null,
-          Pause: null,
-          Mute: null,
-          VolumeUp: null,
-          VolumeDown: null,
-          EnterFullscreen: null,
-          ExitFullscreen: null,
-          EnterPiP: null,
-          ExitPiP: null,
-          CaptionsOn: null,
-          CaptionsOff: null,
-          SeekForward: FastForwardIcon,
-          SeekBackward: FastBackwardIcon,
-        }}
-      />
-    </MediaPlayer>
-  )
+    <div className="relative aspect-video">
+      <div ref={(element) => { if (element) element.inert = showResume; }}>
+        <MediaPlayer
+          ref={playerRef}
+          playsInline
+          aspectRatio={16 / 9}
+          load={showResume || transition ? "eager" : (settings?.load || "idle")}
+          muted={settings?.audio || false}
+          autoPlay={!showResume && !transition && Boolean(settings?.autoplay)}
+          title={itemTitle}
+          className={`${styles.player} player relative`}
+          crossOrigin="anonymous"
+          streamType="on-demand"
+          keyTarget={playerRef}
+          src={{ src: source.url, type: mediaType === "file" ? "?" : mediaType }}
+          onCanPlay={onCanPlay}
+          onDurationChange={(length) => setDuration(length)}
+          onProviderChange={(provider) => {
+            if (isHLSProvider(provider)) provider.library = Hls;
+          }}
+          onEnded={onEnded}
+          onPause={onPause}
+          onTimeUpdate={onTimeUpdate}
+        >
+          <MediaProvider>
+            {subtitles?.map((track) => <Track {...track} key={track.src} />)}
+          </MediaProvider>
+          {activeSkip && (
+            <button
+              type="button"
+              className="absolute bottom-[70px] right-4 z-[40] rounded-md bg-white px-3 py-2 text-black sm:bottom-[83px]"
+              onClick={() => { playerRef.current.currentTime = activeSkip.endTime; }}
+            >
+              Skip {activeSkip.text}
+            </button>
+          )}
+          <VideoLayout
+            subtitles={subtitles}
+            thumbnails={thumbnails?.[0]?.src || ""}
+            groupedEp={groupedEp}
+            showPlayNext={Boolean(nextep && duration > 8 && currentTime >= duration - 8)}
+          />
+          <DefaultKeyboardDisplay
+            icons={{
+              Play: null,
+              Pause: null,
+              Mute: null,
+              VolumeUp: null,
+              VolumeDown: null,
+              EnterFullscreen: null,
+              ExitFullscreen: null,
+              EnterPiP: null,
+              ExitPiP: null,
+              CaptionsOn: null,
+              CaptionsOff: null,
+              SeekForward: FastForwardIcon,
+              SeekBackward: FastBackwardIcon,
+            }}
+          />
+        </MediaPlayer>
+      </div>
+      {showResume && (
+        <div role="group" aria-label="Continue watching?" className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-3 text-center">
+          <p className="font-semibold">Continue watching?</p>
+          <div className="flex flex-wrap justify-center gap-2 text-sm">
+            <button
+              type="button"
+              disabled={!canPlay}
+              onClick={() => chooseResume(resumeTime)}
+              className="rounded-full bg-white px-4 py-2 font-semibold text-black disabled:opacity-50"
+            >
+              Continue from {formatWatchTime(resumeTime)}
+            </button>
+            <button
+              type="button"
+              disabled={!canPlay}
+              onClick={() => chooseResume(0)}
+              className="rounded-full bg-white/15 px-4 py-2 text-white disabled:opacity-50"
+            >
+              Start from the beginning
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
-
-export default Player

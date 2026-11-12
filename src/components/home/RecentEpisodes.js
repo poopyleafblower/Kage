@@ -5,6 +5,7 @@ import { useDraggable } from 'react-use-draggable-scroll';
 import Link from 'next/link';
 import ItemContent from '../CardComponent/ItemContent';
 import { getRecentEpisodes } from '@/lib/getData';
+import { buildWatchUrl } from '@/utils/watch';
 
 function RecentEpisodes({ cardid }) {
     const containerRef = useRef();
@@ -80,7 +81,7 @@ function RecentEpisodes({ cardid }) {
                         const latestEpisode = item?.latestEpisode || '';
                         return (
                             latestEpisode!=='' ? (
-                                <Link href={`/anime/watch?id=${anime.id}&host=gogoanime&epid=${encodeURIComponent(latestEpisode)}&ep=${item?.currentEpisode}&type=sub`} key={anime.id}>
+                                <Link href={buildWatchUrl({ titleId: anime.id, episodeNumber: item.currentEpisode, episodeId: latestEpisode })} key={anime.id}>
                                     <ItemContent anime={anime} cardid={cardid} />
                                 </Link>
                             ) : (

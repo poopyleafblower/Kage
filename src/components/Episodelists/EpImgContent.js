@@ -1,4 +1,5 @@
 "use client"
+import { buildWatchUrl } from '@/utils/watch';
 import React, { useEffect, useRef } from 'react';
 import Image from 'next/image'
 import styles from '../../styles/Epimglist.module.css'
@@ -25,9 +26,7 @@ function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress,
         const Wrapper = playbackEnabled ? Link : 'div';
         const wrapperProps = playbackEnabled
           ? {
-              href: `/anime/watch?id=${data?.id}&host=${defaultProvider}&epid=${encodeURIComponent(
-                episode?.id || episode?.episodeId
-              )}&ep=${episode?.number}&type=${subtype}`,
+              href: buildWatchUrl({ titleId: data?.id, episodeNumber: episode.number, episodeId: episode.id || episode.episodeId, provider: defaultProvider, audio: subtype }),
             }
           : {
               title: "Playback source unavailable",
@@ -55,7 +54,7 @@ function EpImgContent({ data, epdata, defaultProvider, subtype, epnum, progress,
             />  
             </div>
             <div className={styles.epimgright}>
-              <div className={styles.epimgtitle}>{episode?.number}. {episode?.title || "Episode " + episode?.number}</div>
+              <div className={styles.epimgtitle}>{data?.format === "MOVIE" && epdata.length === 1 ? "Complete Movie" : (episode?.title || "Episode " + episode?.number)}</div>
               <div className={styles.epimgdescription}>{episode?.description}</div>
               {episode?.isFiller === true &&
                 <span className='p-1 px-2 text-xs mt-1 rounded-xl bg-[#4D148C] font-semibold w-min inline-block'>Filler</span>

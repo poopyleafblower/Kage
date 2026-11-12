@@ -1,3 +1,4 @@
+import { buildWatchUrl } from "@/utils/watch";
 import buttonStyles from "../styles/button.module.css";
 import tooltipStyles from "../styles/tooltip.module.css";
 import { useNowPlaying, useDataInfo } from "@/lib/store";
@@ -129,7 +130,13 @@ export function NextEpisode({
   const dataInfo = useStore(useDataInfo, (state) => state.dataInfo);
   function handleNext() {
     router.push(
-      `/anime/watch?id=${dataInfo?.id}&host=${nowPlaying?.provider}&epid=${groupedEp?.nextep?.id || groupedEp?.nextep?.episodeId}&ep=${groupedEp?.nextep?.number}&type=${nowPlaying?.subtype}`
+      buildWatchUrl({
+        titleId: dataInfo?.id,
+        episodeNumber: groupedEp?.nextep?.number,
+        episodeId: groupedEp?.nextep?.id || groupedEp?.nextep?.episodeId,
+        provider: nowPlaying?.provider,
+        audio: nowPlaying?.subtype,
+      })
     );
   }
 
@@ -167,7 +174,13 @@ export function PreviousEpisode({
   const dataInfo = useStore(useDataInfo, (state) => state.dataInfo);
   function handlePrev() {
     router.push(
-      `/anime/watch?id=${dataInfo?.id}&host=${nowPlaying?.provider}&epid=${groupedEp?.previousep?.id || groupedEp?.previousep?.episodeId}&ep=${groupedEp?.previousep?.number}&type=${nowPlaying?.subtype}`
+      buildWatchUrl({
+        titleId: dataInfo?.id,
+        episodeNumber: groupedEp?.previousep?.number,
+        episodeId: groupedEp?.previousep?.id || groupedEp?.previousep?.episodeId,
+        provider: nowPlaying?.provider,
+        audio: nowPlaying?.subtype,
+      })
     );
   }
 
@@ -310,12 +323,16 @@ export function PlayNextButton({
       type="button"
       onClick={() => {
         if (groupedEp?.nextep) {
-          router.push(
-            `/anime/watch?id=${dataInfo?.id}&host=${nowPlaying?.provider}&epid=${groupedEp?.nextep?.id || groupedEp?.nextep?.episodeId}&ep=${groupedEp?.nextep?.number}&type=${nowPlaying?.subtype}`
-          );
+          router.push(buildWatchUrl({
+            titleId: dataInfo?.id,
+            episodeNumber: groupedEp.nextep.number,
+            episodeId: groupedEp.nextep.id || groupedEp.nextep.episodeId,
+            provider: nowPlaying?.provider,
+            audio: nowPlaying?.subtype,
+          }));
         }
       }}
-      className="nextbtn hidden absolute bottom-[70px] sm:bottom-[83px] text-[15px] right-4 z-[40] bg-white text-black py-2 px-3 rounded-[4px] font-medium"
+      className="absolute bottom-[70px] sm:bottom-[83px] text-[15px] right-4 z-[40] bg-white text-black py-2 px-3 rounded-[4px] font-medium"
     >
       Next Episode
     </button>

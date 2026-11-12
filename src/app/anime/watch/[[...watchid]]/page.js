@@ -4,8 +4,7 @@ import NextAiringDate from "@/components/videoplayer/NextAiringDate";
 import PlayerAnimeCard from "@/components/videoplayer/PlayerAnimeCard";
 import Navbarcomponent from "@/components/navbar/Navbar";
 import PlayerComponent from "@/components/videoplayer/PlayerComponent";
-import Animecards from "@/components/CardComponent/Animecards";
-import { WatchPageInfo } from "@/lib/AnilistUser";
+import { getEpisodes } from "@/actions/episode";
 import { getAuthSession } from "../../../api/auth/[...nextauth]/route";
 import { redis } from '@/lib/rediscache';
 
@@ -38,19 +37,21 @@ async function getInfo(id) {
 export async function generateMetadata({ params, searchParams }) {
   const id =  searchParams?.id;
   const data = await getInfo(id);
-  const epnum =  searchParams?.ep;
+  const epnum = searchParams?.ep;
+  const title = (data?.format === "MOVIE" ? "Complete Movie" : "Episode " + epnum)
+    + " - " + (data?.title?.english || data?.title?.romaji || "Kage");
 
   return {
-    title:"Episode "+ epnum + ' - ' + data?.title?.english || data?.title?.romaji || 'Loading...',
+    title,
     description: data?.description?.slice(0,180),
     openGraph: {
-      title:"Episode "+ epnum + ' - ' + data?.title?.english || data?.title?.romaji,
+      title,
       images: [data?.coverImage?.extraLarge],
       description: data?.description,
     },
     twitter: {
       card: "summary",
-      title:"Episode "+ epnum + ' - ' + data?.title?.english || data?.title?.romaji,
+      title,
       description: data?.description?.slice(0,180),
     },
   }
@@ -58,42 +59,36 @@ export async function generateMetadata({ params, searchParams }) {
 
 async function AnimeWatch({ params, searchParams }) {
   const id = searchParams.id;
-  const provider = searchParams.host;
   const epNum = searchParams.ep;
-  const epId = searchParams.epid;
-  const subdub = searchParams.type;
-  const [session, data] = await Promise.all([
-    getAuthSession(),
-    getInfo(id),
-  ]);
-  // console.log(savedep)
-  // console.log(data)
+  const subdub = searchParams.type === "dub" ? "dub" : "sub";
+  const [session, data] = await Promise.all([getAuthSession(), getInfo(id)]);
+  let provider = searchParams.host;
+  let epId = searchParams.epid;
+
+  if (id && epNum && !provider) {
+    const providers = await getEpisodes(id, data?.status === "RELEASING");
+    for (const candidate of providers.filter((item) => item.playback)) {
+      const episodes = Array.isArray(candidate.episodes) ? candidate.episodes : candidate.episodes?.[subdub];
+      const episode = episodes?.find((item) => Number(item.number) === Number(epNum));
+      if (episode) {
+        provider = candidate.providerId;
+        epId = episode.id || episode.episodeId || epId;
+        break;
+      }
+    }
+  }
+  provider ||= "embed";
 
   return (
     <>
-        <Navbarcomponent />
-      <div className=" w-full flex flex-col lg:flex-row lg:max-w-[98%] mx-auto xl:max-w-[94%] lg:gap-[6px] mt-[70px]">
-        <div className="flex-grow w-full h-full">
-          <PlayerComponent id={id} epId={epId} provider={provider} epNum={epNum} data={data} subdub={subdub} session={session} savedep={null}/>
-          {data?.status === 'RELEASING' &&
-            <NextAiringDate nextAiringEpisode={data?.nextAiringEpisode} />
-          }
+      <Navbarcomponent />
+      <main className="mx-auto mt-[70px] w-full px-2 lg:max-w-[98%] xl:max-w-[94%]">
+        <PlayerComponent id={id} epId={epId} provider={provider} epNum={epNum} data={data} subdub={subdub} session={session} />
+        {data?.status === "RELEASING" && <NextAiringDate nextAiringEpisode={data.nextAiringEpisode} />}
+        <div className="hidden max-w-[380px] lg:block">
+          <PlayerAnimeCard data={data?.recommendations?.nodes} id="Recommendations" />
         </div>
-        <div className="h-full lg:flex lg:flex-col md:max-lg:w-full gap-10">
-        {/* <div className="rounded-lg hidden lg:block lg:max-w-[280px] xl:max-w-[380px] w-[100%] xl:overflow-y-scroll xl:overflow-x-hidden overflow-hidden scrollbar-hide overflow-y-hidden">
-            <PlayerAnimeCard data={data?.relations?.edges} id="Related Anime"/>
-          </div> */}
-          <div className="rounded-lg hidden lg:block lg:max-w-[280px] xl:max-w-[380px] w-[100%] xl:overflow-y-scroll xl:overflow-x-hidden overflow-hidden scrollbar-hide overflow-y-hidden">
-            <PlayerAnimeCard data={data?.recommendations?.nodes} id="Recommendations"/>
-          </div>
-        </div>
-        {/* <div className="lg:hidden">
-        <Animecards data={data?.relations?.edges} cardid="Related Anime"/>
-        </div> */}
-        {/* <div className="lg:hidden">
-        <Animecards data={data?.recommendations?.nodes} cardid={"Recommendations"}/>
-        </div> */}
-      </div>
+      </main>
     </>
   );
 }

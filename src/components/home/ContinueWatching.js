@@ -1,7 +1,6 @@
 "use client"
 import React, { useEffect, useState, useRef } from 'react'
 import Image from 'next/image';
-import Link from 'next/link';
 import { useDraggable } from 'react-use-draggable-scroll';
 import { Popover, PopoverTrigger, PopoverContent } from "@nextui-org/react";
 import { useRouter } from 'next-nprogress-bar';
@@ -9,6 +8,8 @@ import { toast } from 'sonner'
 import Skeleton from "react-loading-skeleton";
 import { deleteEpisodes, getWatchHistory, getAniListCurrent } from '@/lib/EpHistoryfunctions';
 import { useSettings } from '@/lib/store';
+import { buildWatchUrl, formatWatchTime } from '@/utils/watch';
+import { readLocalWatchHistory, removeLocalWatchHistory } from '@/utils/watchProgress';
 import { useStore } from 'zustand';
 
 function ContinueWatching({ session }) {
@@ -32,13 +33,6 @@ function ContinueWatching({ session }) {
         return filteredHistory;
     }
 
-    function removeFromLocalStorage(id) {
-        const history = JSON.parse(localStorage.getItem('vidstack_settings')) || {};
-        if (history[id]) {
-            delete history[id];
-            localStorage.setItem('vidstack_settings', JSON.stringify(history));
-        }
-    }
 
 
     useEffect(() => {
@@ -80,12 +74,7 @@ function ContinueWatching({ session }) {
                     setloading(false);
                 }
                 else {
-                    const data = JSON.parse(localStorage.getItem('vidstack_settings'));
-                    if (data) {
-                        const mappedValues = Object.keys(data).map((key) => data[key]);
-                        const sortedData = mappedValues.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                        setStoredData(sortedData);
-                    }
+                    setStoredData(readLocalWatchHistory());
                     setloading(false)
                 }
             }
@@ -114,13 +103,13 @@ function ContinueWatching({ session }) {
                     } else {
                         setStoredData([]);
                     }
-                    removeFromLocalStorage(id);
+                    removeLocalWatchHistory(id);
                 } else {
                     toast.error('Failed to remove anime from history. Please try again later.');
                 }
             }
             else {
-                removeFromLocalStorage(id);
+                removeLocalWatchHistory(id);
                 toast.success(`${aniTitle}`, {
                     description: `Removed anime from watch history.`,
                 });
@@ -139,11 +128,13 @@ function ContinueWatching({ session }) {
                 ? (anime?.nextepNum || anime?.epNum || anime?.epnum || 1)
                 : (anime?.epNum || anime?.epnum || 1)
         );
-        const provider = anime?.provider || "embed";
-        const subtype = preferredAudio || anime?.subtype || "sub";
-        const episodeId = encodeURIComponent(`${aniId}/${subtype}/${episode}`);
-
-        return `/anime/watch?id=${aniId}&host=${provider}&epid=${episodeId}&ep=${episode}&type=${subtype}`;
+        return buildWatchUrl({
+            titleId: aniId,
+            episodeNumber: episode,
+            episodeId: next ? anime?.nextepId : anime?.epId,
+            provider: anime?.provider === "embed" ? undefined : anime?.provider,
+            audio: anime?.fromAniList ? preferredAudio : (anime?.subtype || preferredAudio),
+        });
     }
 
     function openWatch(anime, next = false) {
@@ -152,16 +143,6 @@ function ContinueWatching({ session }) {
         router.push(getWatchUrl(anime, next));
     }
 
-    function formatTime(totalSeconds) {
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = Math.floor(totalSeconds % 60);
-
-        const formattedMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
-        const formattedSeconds = seconds < 10 ? `0${seconds}` : `${seconds}`;
-
-        const formattedTime = `${formattedMinutes}:${formattedSeconds}`;
-        return formattedTime;
-    }
 
     if (!loading && storedData.length === 0) {
         return <div {...events} ref={containerRef}></div>;
@@ -217,7 +198,7 @@ function ContinueWatching({ session }) {
                                     <span className="text-[0.7rem] text-[#D1D7E0]">
                                         {anime?.fromAniList
                                             ? `AniList • Continue with Episode ${anime?.epNum || anime?.epnum}`
-                                            : `${formatTime(anime?.timeWatched)} / ${formatTime(anime?.duration)} - Episode ${anime?.epNum || anime?.epnum}`}
+                                            : `${formatWatchTime(anime?.timeWatched)} / ${formatWatchTime(anime?.duration)} · ${anime?.epTitle === "Complete Movie" ? anime.epTitle : "Episode " + (anime?.epNum || anime?.epnum)}`}
                                     </span>
                                 </div>
                             </div>
